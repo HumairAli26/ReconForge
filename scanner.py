@@ -2,6 +2,7 @@ import ipaddress
 from scapy.all import ARP, Ether, srp, conf
 from mac_vendor_lookup import MacLookup
 import socket
+from device_info import collect_device_info
 
 lookup = MacLookup()
 try:
@@ -47,14 +48,15 @@ def arp_scan(network):
         ip = received.psrc
         mac = received.hwsrc
 
-        devices.append({
-            "ip": ip,
-            "mac": mac,
-            "hostname": get_hostname(ip),
-            "vendor": get_vendor(mac)
-        })
+        basic_device = {
+        "ip": ip,
+        "mac": mac
+        }
 
-    return devices
+        devices.append(
+            collect_device_info(basic_device)
+        )
+        return devices
 
 
 def print_results(devices):

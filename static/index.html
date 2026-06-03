@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>ReconForge — White Hat Security Suite</title>
+    <!-- Three.js and OrbitControls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <!-- Google Fonts & FontAwesome -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!-- Background grid effect -->
+    <div class="grid-bg"></div>
+
+    <div class="app-container">
+        <!-- Sidebar Controls -->
+        <aside class="sidebar">
+            <div class="logo">
+                <i class="fa-solid fa-shield-halved glow-icon"></i>
+                <h2>Recon<span>Forge</span></h2>
+            </div>
+            
+            <div class="control-group">
+                <h3><i class="fa-solid fa-network-wired"></i> Target Subnet</h3>
+                <div class="input-row">
+                    <input type="text" id="target-subnet" value="192.168.1.0/24">
+                    <button id="btn-detect" title="Auto-detect subnet"><i class="fa-solid fa-crosshairs"></i></button>
+                </div>
+                <button id="btn-scan-network" class="btn btn-primary"><i class="fa-solid fa-magnifying-glass"></i> Discover Hosts</button>
+            </div>
+
+            <div class="control-group">
+                <h3><i class="fa-solid fa-bug"></i> Metasploit Engine</h3>
+                <div class="status-bar">
+                    <span>MSF Status:</span>
+                    <span id="msf-status" class="status-badge badge-warn">Checking...</span>
+                </div>
+                <div class="form-row">
+                    <label for="exploit-select">Exploit Module</label>
+                    <select id="exploit-select">
+                        <option value="">Select exploit...</option>
+                    </select>
+                </div>
+                <button id="btn-exploit" class="btn btn-danger" disabled><i class="fa-solid fa-bolt"></i> Run Assessment Exploit</button>
+            </div>
+
+            <div class="control-group">
+                <h3><i class="fa-solid fa-file-invoice"></i> Assessment Report</h3>
+                <a href="/api/report/generate" target="_blank" class="btn btn-success"><i class="fa-solid fa-file-pdf"></i> Generate & Download Report</a>
+            </div>
+
+            <!-- Stats overlay -->
+            <div class="stats-panel">
+                <div class="stat-card">
+                    <div class="stat-num" id="stat-devices">0</div>
+                    <div class="stat-label">Hosts Found</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-num" id="stat-vulns">0</div>
+                    <div class="stat-label">Vulnerable</div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Workspace -->
+        <main class="workspace">
+            <!-- 3D Canvas Area -->
+            <section class="canvas-container">
+                <div id="three-canvas-holder"></div>
+                <!-- Interactive Controls Guide -->
+                <div class="hud hud-top-left">
+                    <div class="hud-title">Interactive Topology Map</div>
+                    <div class="hud-subtitle">Left Click: Select host | Drag: Rotate | Scroll: Zoom</div>
+                </div>
+                <!-- Dynamic Host Details Card overlay on canvas -->
+                <div id="host-details-card" class="host-details-card hidden">
+                    <button class="close-btn">&times;</button>
+                    <h3><i class="fa-solid fa-server"></i> Host Information</h3>
+                    <div class="info-row"><strong>IP Address:</strong> <span id="host-ip">-</span></div>
+                    <div class="info-row"><strong>MAC Address:</strong> <span id="host-mac">-</span></div>
+                    <div class="info-row"><strong>Hostname:</strong> <span id="host-hostname">-</span></div>
+                    <div class="info-row"><strong>Vendor:</strong> <span id="host-vendor">-</span></div>
+                    <div class="info-row"><strong>Type:</strong> <span id="host-type">-</span></div>
+                    <div class="info-row"><strong>Risk State:</strong> <span id="host-risk" class="badge">-</span></div>
+                    
+                    <div style="margin-top: 15px;">
+                        <button id="btn-scan-ports" class="btn btn-secondary btn-sm"><i class="fa-solid fa-circle-nodes"></i> Scan Ports & Services</button>
+                    </div>
+
+                    <div id="host-ports-section" style="margin-top: 15px;">
+                        <h4>Open Ports</h4>
+                        <ul id="ports-list" class="mono-list">
+                            <li>Run port scan...</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Bottom Console Log Output Panel -->
+            <section class="console-panel">
+                <div class="console-header">
+                    <span><i class="fa-solid fa-terminal"></i> Metasploit Execution Log</span>
+                    <button id="btn-clear-console" class="btn-clear"><i class="fa-solid fa-trash-can"></i> Clear</button>
+                </div>
+                <div class="console-body" id="console-output">
+                    [ReconForge Ready] Select a target IP, select a Metasploit exploit, and trigger an assessment run.
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Web App Controllers -->
+    <script src="js/network3d.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

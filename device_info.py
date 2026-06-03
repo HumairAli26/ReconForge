@@ -5,11 +5,6 @@ from mac_vendor_lookup import MacLookup
 # Initialize vendor lookup database
 lookup = MacLookup()
 
-try:
-    lookup.update_vendors()
-except:
-    pass
-
 
 def get_hostname(ip):
     try:

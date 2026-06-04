@@ -21,17 +21,21 @@ except ImportError:
     MODULES = []
     def get_module(key): return None
 
+import threading
+
 class MSFRunner:
     def __init__(self, msf_path: str = None):
         self.bridge = None
         if MSF_SUPPORTED:
             try:
                 self.bridge = MSFBridge(msf_path=msf_path)
+                # Spin up msfconsole in background thread
+                threading.Thread(target=self.bridge.start, daemon=True).start()
             except Exception:
                 pass
 
     def is_available(self) -> bool:
-        return MSF_SUPPORTED and self.bridge is not None and self.bridge.is_installed()
+        return MSF_SUPPORTED and self.bridge is not None and self.bridge._ready
 
     def get_available_modules(self):
         return MODULES

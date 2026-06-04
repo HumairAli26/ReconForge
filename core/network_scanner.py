@@ -75,6 +75,20 @@ def _ping_host(ip: str, timeout: float = 0.5) -> bool:
         return False
 
 
+def _probe_tcp(ip: str, timeout: float = 0.15) -> bool:
+    """Fast check for standard open ports to detect hosts behind firewalls."""
+    ports = [22, 80, 135, 443, 445, 3389, 8080]
+    for port in ports:
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(timeout)
+                if s.connect_ex((ip, port)) == 0:
+                    return True
+        except Exception:
+            pass
+    return False
+
+
 def _auto_detect_network() -> str:
     """Detect local /24 subnet."""
     if SCAPY_AVAILABLE:
@@ -174,7 +188,7 @@ class NetworkScanner:
             if not self._running:
                 return None
             ip = str(ip_obj)
-            alive = _ping_host(ip)
+            alive = _ping_host(ip) or _probe_tcp(ip)
             with lock:
                 done[0] += 1
                 if on_progress:

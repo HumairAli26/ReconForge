@@ -1,10 +1,10 @@
 [build-system]
 requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.build_meta"
+build-backend = "setuptools.backends.legacy:build"
 
 [project]
 name = "reconforge"
-version = "1.0.4"
+version = "1.0.0"
 description = "Network Discovery and Security Assessment Platform"
 readme = "README.md"
 license = { file = "LICENSE" }

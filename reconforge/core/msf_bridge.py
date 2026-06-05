@@ -71,7 +71,7 @@ class MSFBridge:
         bridge.stop()
     """
 
-    PROMPT = ["msf6 >", "msf >", "msf5 >"]
+    PROMPT = "msf6 >"
     TIMEOUT = 120  # seconds per command
 
     def __init__(self, msf_path: Optional[str] = None):

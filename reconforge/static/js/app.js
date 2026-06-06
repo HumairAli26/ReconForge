@@ -1,5 +1,5 @@
-// app.js — ReconForge Frontend Controller v2
-// Fixes: MSF status polling, rich console, improved UX
+// app.js — ReconForge Frontend Controller v3.4
+// Features: async scans, engine selector, shutdown on tab close
 
 const API = '';   // same-origin
 let currentDevices  = [];
@@ -7,6 +7,21 @@ let selectedDevice  = null;
 let logCount        = 0;
 let msfReady        = false;
 let msfInstalled    = false;
+
+// ── Shutdown server when tab/browser closes ───────────────────────────────────
+window.addEventListener('beforeunload', () => {
+  // Use sendBeacon for reliability during page unload
+  navigator.sendBeacon(`${API}/api/shutdown`, JSON.stringify({reason: 'browser closed'}));
+});
+
+// ── Heartbeat — detect if server died externally ──────────────────────────────
+setInterval(() => {
+  fetch(`${API}/api/ping`, { cache: 'no-store' })
+    .catch(() => {
+      // Server gone — show disconnected state
+      document.title = '⚠ ReconForge — Disconnected';
+    });
+}, 10000);
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -117,36 +132,73 @@ function detectSubnet() {
     .catch(()=>log('warn','Could not auto-detect network.'));
 }
 
-// ── Host Discovery ────────────────────────────────────────────────────────────
+// ── Host Discovery — async with progress polling ───────────────────────────
 $('btn-scan-network').addEventListener('click', () => {
   const net = $('target-subnet').value.trim();
   if (!net) return;
-  log('info', `Starting ARP/ICMP sweep on: ${net}`);
+  log('info', `Starting sweep on: ${net} — you can use other features while scanning`);
   setActivity('SCANNING', true);
   $('btn-scan-network').disabled = true;
   $('btn-scan-network').innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> SCANNING...';
 
+  // Kick off background scan
   fetch(`${API}/api/scan/network`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ network: net })
   })
-  .then(r=>r.json())
-  .then(data=>{
-    $('btn-scan-network').disabled = false;
-    $('btn-scan-network').innerHTML = '<i class="fa-solid fa-radar"></i> DISCOVER HOSTS';
-    setActivity('IDLE', false);
-    if (data.success) {
-      currentDevices = data.devices;
-      $('stat-devices').textContent = currentDevices.length;
-      log('ok', `Sweep complete — ${currentDevices.length} host(s) found on ${net}`);
-      currentDevices.forEach(d=>log('dim', `  ${d.ip.padEnd(16)} ${(d.hostname||'Unknown').padEnd(24)} ${d.vendor||''}`));
-      if (typeof updateNetworkTopology === 'function') updateNetworkTopology(currentDevices);
-    } else {
-      log('err', 'Sweep failed or no hosts found.');
+  .then(r => r.json())
+  .then(data => {
+    if (!data.success && data.error) {
+      log('err', `Scan error: ${data.error}`);
+      $('btn-scan-network').disabled = false;
+      $('btn-scan-network').innerHTML = '<i class="fa-solid fa-radar"></i> DISCOVER HOSTS';
+      setActivity('IDLE', false);
+      return;
     }
+    // Poll for results every 2 seconds
+    let lastCount = 0;
+    const poll = setInterval(() => {
+      fetch(`${API}/api/scan/network/status`)
+        .then(r => r.json())
+        .then(s => {
+          // Show new devices as they come in
+          if (s.count > lastCount) {
+            const newDevs = s.devices.slice(lastCount);
+            newDevs.forEach(d => {
+              log('ok', `Found: ${d.ip.padEnd(16)} ${(d.hostname||'Unknown').padEnd(24)} ${d.vendor||''}`);
+            });
+            lastCount = s.count;
+            currentDevices = s.devices;
+            $('stat-devices').textContent = currentDevices.length;
+            if (typeof updateNetworkTopology === 'function') updateNetworkTopology(currentDevices);
+          }
+          // Update progress bar label
+          if (s.total > 0) {
+            const pct = Math.round((s.progress / s.total) * 100);
+            $('btn-scan-network').innerHTML =
+              `<i class="fa-solid fa-spinner fa-spin"></i> ${pct}% (${s.count} found)`;
+          }
+          // Scan done
+          if (!s.scanning) {
+            clearInterval(poll);
+            $('btn-scan-network').disabled = false;
+            $('btn-scan-network').innerHTML = '<i class="fa-solid fa-radar"></i> DISCOVER HOSTS';
+            setActivity('IDLE', false);
+            currentDevices = s.devices;
+            $('stat-devices').textContent = currentDevices.length;
+            if (currentDevices.length === 0) {
+              log('warn', 'No hosts found. Try running with sudo for ARP scanning.');
+            } else {
+              log('ok', `Sweep complete — ${currentDevices.length} host(s) found on ${net}`);
+            }
+            if (typeof updateNetworkTopology === 'function') updateNetworkTopology(currentDevices);
+          }
+        })
+        .catch(() => clearInterval(poll));
+    }, 2000);
   })
-  .catch(e=>{
+  .catch(e => {
     $('btn-scan-network').disabled = false;
     $('btn-scan-network').innerHTML = '<i class="fa-solid fa-radar"></i> DISCOVER HOSTS';
     setActivity('ERROR', false);
@@ -404,32 +456,51 @@ $('btn-scan-ports').addEventListener('click', ()=>{
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ip })
   })
-  .then(r=>r.json())
-  .then(data=>{
-    $('btn-scan-ports').disabled = false;
-    $('btn-scan-ports').innerHTML = '<i class="fa-solid fa-circle-nodes"></i> SCAN PORTS & SERVICES';
-    setActivity('IDLE', false);
-    if (data.success) {
-      const d = data.device;
-      const idx = currentDevices.findIndex(x=>x.ip===ip);
-      if (idx!==-1) currentDevices[idx] = d; else currentDevices.push(d);
-      window.showHostDetails(d);
-      if (typeof updateNetworkTopology === 'function') updateNetworkTopology(currentDevices);
-
-      const openCount = (d.open_ports||[]).length;
-      const vulnCount = (d.vulns||[]).length;
-      log('ok', `Scan complete for ${ip} — ${openCount} open port(s), ${vulnCount} vuln(s) detected`);
-
-      // Refresh stats
-      const totalOpen  = currentDevices.reduce((s,x)=>s+(x.open_ports||[]).length, 0);
-      const totalVulns = currentDevices.filter(x=>x.vulns&&x.vulns.length).length;
-      $('stat-open').textContent  = totalOpen;
-      $('stat-vulns').textContent = totalVulns;
-    } else {
-      log('err', `Port scan failed: ${data.error||'unknown error'}`);
+  .then(r => r.json())
+  .then(data => {
+    if (!data.success && data.error) {
+      log('err', `Port scan error: ${data.error}`);
+      $('btn-scan-ports').disabled = false;
+      $('btn-scan-ports').innerHTML = '<i class="fa-solid fa-circle-nodes"></i> SCAN PORTS & SERVICES';
+      setActivity('IDLE', false);
+      return;
     }
+    // Poll until done
+    let elapsed = 0;
+    const poll = setInterval(() => {
+      elapsed += 3;
+      $('btn-scan-ports').innerHTML =
+        `<i class="fa-solid fa-spinner fa-spin"></i> SCANNING... ${elapsed}s`;
+
+      fetch(`${API}/api/scan/ports/status?ip=${encodeURIComponent(ip)}`)
+        .then(r => r.json())
+        .then(s => {
+          if (s.done && s.device) {
+            clearInterval(poll);
+            $('btn-scan-ports').disabled = false;
+            $('btn-scan-ports').innerHTML = '<i class="fa-solid fa-circle-nodes"></i> SCAN PORTS & SERVICES';
+            setActivity('IDLE', false);
+
+            const d = s.device;
+            const idx = currentDevices.findIndex(x => x.ip === ip);
+            if (idx !== -1) currentDevices[idx] = d; else currentDevices.push(d);
+            window.showHostDetails(d);
+            if (typeof updateNetworkTopology === 'function') updateNetworkTopology(currentDevices);
+
+            const openCount = (d.open_ports||[]).length;
+            const vulnCount = (d.vulns||[]).length;
+            log('ok', `Port scan done for ${ip} — ${openCount} open port(s), ${vulnCount} vuln(s)`);
+
+            const totalOpen  = currentDevices.reduce((s,x) => s+(x.open_ports||[]).length, 0);
+            const totalVulns = currentDevices.filter(x => x.vulns && x.vulns.length).length;
+            $('stat-open').textContent  = totalOpen;
+            $('stat-vulns').textContent = totalVulns;
+          }
+        })
+        .catch(() => clearInterval(poll));
+    }, 3000);
   })
-  .catch(e=>{
+  .catch(e => {
     $('btn-scan-ports').disabled = false;
     $('btn-scan-ports').innerHTML = '<i class="fa-solid fa-circle-nodes"></i> SCAN PORTS & SERVICES';
     log('err', `Port scan error: ${e.message}`);

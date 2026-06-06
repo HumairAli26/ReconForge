@@ -62,38 +62,82 @@
         </button>
       </div>
 
-      <!-- MSF Engine -->
+      <!-- Scan Engine Selector -->
       <div class="panel">
         <div class="panel-header">
           <i class="fa-solid fa-microchip"></i>
-          <span>METASPLOIT ENGINE</span>
+          <span>SCAN ENGINE</span>
           <div class="panel-header-line"></div>
         </div>
 
-        <div class="msf-status-row">
-          <div class="msf-dot-wrap">
-            <div class="msf-dot" id="msf-dot"></div>
-          </div>
-          <div class="msf-labels">
-            <div class="msf-label-top">MSF PROCESS</div>
-            <div class="msf-label-val" id="msf-label">INITIALISING...</div>
-          </div>
-          <div id="msf-badge" class="msf-badge badge-init">WAIT</div>
+        <!-- Engine toggle buttons -->
+        <div class="engine-toggle">
+          <button id="engine-btn-msf" class="engine-btn active" onclick="selectEngine('msf')">
+            <i class="fa-solid fa-skull-crossbones"></i> METASPLOIT
+          </button>
+          <button id="engine-btn-nuclei" class="engine-btn" onclick="selectEngine('nuclei')">
+            <i class="fa-solid fa-atom"></i> NUCLEI
+          </button>
         </div>
 
-        <div class="msf-hint" id="msf-hint">Checking for msfconsole...</div>
-
-        <div class="form-field">
-          <label>EXPLOIT MODULE</label>
-          <div class="select-wrap">
-            <select id="exploit-select"><option value="">Loading modules...</option></select>
-            <i class="fa-solid fa-chevron-down select-arrow"></i>
+        <!-- MSF Status -->
+        <div id="msf-engine-panel">
+          <div class="msf-status-row">
+            <div class="msf-dot-wrap">
+              <div class="msf-dot" id="msf-dot"></div>
+            </div>
+            <div class="msf-labels">
+              <div class="msf-label-top">MSF PROCESS</div>
+              <div class="msf-label-val" id="msf-label">INITIALISING...</div>
+            </div>
+            <div id="msf-badge" class="msf-badge badge-init">WAIT</div>
           </div>
+          <div class="msf-hint" id="msf-hint">Checking msfconsole... run: sudo msfdb init</div>
+          <div class="form-field">
+            <label>EXPLOIT MODULE</label>
+            <div class="select-wrap">
+              <select id="exploit-select"><option value="">Loading modules...</option></select>
+              <i class="fa-solid fa-chevron-down select-arrow"></i>
+            </div>
+          </div>
+          <button id="btn-exploit" class="btn btn-danger" disabled>
+            <i class="fa-solid fa-bolt-lightning"></i> RUN MSF MODULE
+          </button>
         </div>
 
-        <button id="btn-exploit" class="btn btn-danger" disabled>
-          <i class="fa-solid fa-bolt-lightning"></i> RUN ASSESSMENT
-        </button>
+        <!-- Nuclei Status -->
+        <div id="nuclei-engine-panel" style="display:none">
+          <div class="msf-status-row">
+            <div class="msf-dot-wrap">
+              <div class="msf-dot" id="nuclei-dot"></div>
+            </div>
+            <div class="msf-labels">
+              <div class="msf-label-top">NUCLEI ENGINE</div>
+              <div class="msf-label-val" id="nuclei-label">CHECKING...</div>
+            </div>
+            <div id="nuclei-badge" class="msf-badge badge-init">WAIT</div>
+          </div>
+          <div class="msf-hint" id="nuclei-hint">Install: sudo apt install nuclei</div>
+          <div class="form-field">
+            <label>SEVERITY FILTER</label>
+            <div class="select-wrap">
+              <select id="nuclei-severity-select">
+                <option value="critical,high,medium">Critical + High + Medium</option>
+                <option value="critical,high">Critical + High only</option>
+                <option value="critical">Critical only</option>
+                <option value="critical,high,medium,low">All except Info</option>
+                <option value="critical,high,medium,low,info">All severities</option>
+              </select>
+              <i class="fa-solid fa-chevron-down select-arrow"></i>
+            </div>
+          </div>
+          <button id="btn-nuclei-scan" class="btn btn-danger" disabled>
+            <i class="fa-solid fa-atom"></i> RUN NUCLEI SCAN
+          </button>
+          <button id="btn-nuclei-update" class="btn btn-secondary" style="margin-top:6px;font-size:11px;" disabled>
+            <i class="fa-solid fa-arrow-rotate-right"></i> UPDATE TEMPLATES
+          </button>
+        </div>
       </div>
 
       <!-- Report -->

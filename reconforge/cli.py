@@ -359,12 +359,27 @@ def build_parser() -> argparse.ArgumentParser:
     msf.add_argument("--timeout", type=float, default=1.5,
                      help="TCP connect timeout in seconds (default: 1.5)")
 
+    # ── Nuclei options ────────────────────────────────────────────────────────
+    nuc = p.add_argument_group("Nuclei Options  (fast template-based vuln scanning)")
+    nuc.add_argument("--nuclei", action="store_true",
+                     help="Run nuclei scan against target (instant start, no boot delay)")
+    nuc.add_argument("--nuclei-severity", metavar="LEVEL",
+                     default="critical,high,medium",
+                     help="Severity filter: critical,high,medium,low,info (default: critical,high,medium)")
+    nuc.add_argument("--nuclei-tags", metavar="TAGS",
+                     help="Nuclei template tags to include (e.g. 'cve,misconfig,exposed-panels')")
+    nuc.add_argument("--nuclei-update", action="store_true",
+                     help="Update nuclei templates before scanning")
+    nuc.add_argument("--nuclei-path", metavar="PATH",
+                     help="Full path to nuclei binary")
+
     # ── Output / info ─────────────────────────────────────────────────────────
     info = p.add_argument_group("Information & Utilities")
-    info.add_argument("--no-banner",      action="store_true", help="Suppress ASCII banner")
-    info.add_argument("--list-modules",   action="store_true", help="List all MSF modules and exit")
-    info.add_argument("--list-categories",action="store_true", help="List module categories and exit")
-    info.add_argument("--check-deps",     action="store_true", help="Check system dependencies and exit")
+    info.add_argument("--no-banner",       action="store_true", help="Suppress ASCII banner")
+    info.add_argument("--list-modules",    action="store_true", help="List all MSF modules and exit")
+    info.add_argument("--list-categories", action="store_true", help="List module categories and exit")
+    info.add_argument("--check-deps",      action="store_true", help="Check system dependencies and exit")
+    info.add_argument("--nuclei-status",   action="store_true", help="Check nuclei installation and exit")
 
     return p
 
@@ -394,6 +409,118 @@ def main():
 
     if args.list_categories:
         list_categories_table()
+        return
+
+    if args.nuclei_status:
+        from reconforge.core.nuclei_bridge import NucleiBridge
+        nb = NucleiBridge(nuclei_path=getattr(args, "nuclei_path", None))
+        if nb.is_available():
+            console.print(f"[green][+][/green] nuclei installed: {nb.get_version()}" if _RICH
+                          else f"[+] nuclei installed: {nb.get_version()}")
+            console.print(f"[green][+][/green] Path: {nb.nuclei_path}" if _RICH
+                          else f"[+] Path: {nb.nuclei_path}")
+        else:
+            console.print("[red][!][/red] nuclei not found." if _RICH
+                          else "[!] nuclei not found.")
+            console.print("    Install: sudo apt install nuclei" if _RICH
+                          else "    Install: sudo apt install nuclei")
+            console.print("    Or:      go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest" if _RICH
+                          else "    Or:      go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest")
+        return
+
+    # ── Nuclei standalone scan ────────────────────────────────────────────────
+    if args.nuclei:
+        if not args.target:
+            console.print("[red][!][/red] --nuclei requires -t <target>" if _RICH
+                          else "[!] --nuclei requires -t <target>")
+            sys.exit(1)
+
+        from reconforge.core.nuclei_bridge import NucleiBridge
+        nb = NucleiBridge(nuclei_path=getattr(args, "nuclei_path", None))
+
+        if not nb.is_available():
+            console.print("[red][!][/red] nuclei not installed." if _RICH
+                          else "[!] nuclei not installed.")
+            console.print("    Install: sudo apt install nuclei" if _RICH
+                          else "    Install: sudo apt install nuclei")
+            sys.exit(1)
+
+        if args.nuclei_update:
+            console.print("[cyan][*][/cyan] Updating nuclei templates..." if _RICH
+                          else "[*] Updating nuclei templates...")
+            nb.update_templates()
+
+        severities = [s.strip() for s in args.nuclei_severity.split(",")]
+        tags = [t.strip() for t in args.nuclei_tags.split(",")] if args.nuclei_tags else None
+
+        if _RICH:
+            console.rule(f"[bold cyan]Nuclei Scan: {args.target}[/bold cyan]")
+            console.print(f"[cyan][*][/cyan] Severities : [yellow]{', '.join(severities)}[/yellow]")
+            if tags:
+                console.print(f"[cyan][*][/cyan] Tags       : [yellow]{', '.join(tags)}[/yellow]")
+            console.print(f"[cyan][*][/cyan] Engine     : [green]nuclei {nb.get_version()}[/green]\n")
+        else:
+            print(f"\n[*] Nuclei Scan: {args.target}")
+            print(f"[*] Severities: {', '.join(severities)}")
+
+        finding_count = [0]
+
+        def on_finding(f):
+            finding_count[0] += 1
+            sev = f.get("severity", "info").upper()
+            colours = {"CRITICAL": "red", "HIGH": "orange3",
+                       "MEDIUM": "yellow", "LOW": "dim", "INFO": "blue"}
+            col = colours.get(sev, "white")
+            if _RICH:
+                console.print(
+                    f"  [bold {col}][{sev}][/bold {col}] "
+                    f"[white]{f.get('name','?')}[/white]  "
+                    f"[dim]{f.get('matched', f.get('host',''))}[/dim]"
+                )
+            else:
+                print(f"  [{sev}] {f.get('name','?')}  {f.get('matched','')}")
+
+        try:
+            findings = nb.scan(
+                args.target,
+                severities=severities,
+                tags=tags,
+                on_finding=on_finding,
+            )
+        except KeyboardInterrupt:
+            console.print("\n[yellow][!][/yellow] Aborted." if _RICH else "\n[!] Aborted.")
+            sys.exit(0)
+
+        # Summary
+        if _RICH:
+            console.rule("[bold cyan]Nuclei Scan Summary[/bold cyan]")
+            from rich.table import Table as RTable
+            st = RTable(show_header=False, box=None, padding=(0, 4))
+            st.add_column(style="dim")
+            st.add_column(style="bold white")
+            st.add_row("Target:",   args.target)
+            st.add_row("Total findings:", str(len(findings)))
+            for sev in ("critical", "high", "medium", "low", "info"):
+                count = sum(1 for f in findings if f.get("severity") == sev)
+                if count:
+                    col = {"critical":"red","high":"orange3","medium":"yellow",
+                           "low":"dim","info":"blue"}.get(sev, "white")
+                    st.add_row(f"{sev.capitalize()}:", f"[{col}]{count}[/{col}]")
+            console.print(st)
+        else:
+            print(f"\n[*] Total findings: {len(findings)}")
+
+        # Save JSON report
+        if findings:
+            import json as _json
+            out = args.output or f"nuclei_{args.target.replace('/', '_')}_{int(time.time())}.json"
+            with open(out, "w") as f:
+                _json.dump({"target": args.target, "findings": findings}, f, indent=2)
+            console.print(f"[green][+][/green] Report saved → [bold]{out}[/bold]" if _RICH
+                          else f"[+] Report saved → {out}")
+
+        if _RICH:
+            console.rule("[bold green]Done[/bold green]")
         return
 
     # ── Interactive TUI ──────────────────────────────────────────────────────

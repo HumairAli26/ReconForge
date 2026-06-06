@@ -154,24 +154,39 @@ $('btn-scan-network').addEventListener('click', () => {
   });
 });
 
-// ── MSF Status — polling approach (fixes always-offline bug) ──────────────────
+// ── Engine state ───────────────────────────────────────────────────────────────
+let activeEngine = 'msf';  // 'msf' or 'nuclei'
+
+// ── MSF + Nuclei Status polling ────────────────────────────────────────────────
 function pollMsfStatus() {
   const check = () => {
-    fetch(`${API}/api/msf/status`)
+    fetch(`${API}/api/engine/status`)
       .then(r=>r.json())
-      .then(updateMsfUI)
-      .catch(()=>{});
+      .then(data => {
+        updateMsfUI(data.msf);
+        updateNucleiUI(data.nuclei);
+        activeEngine = data.active_engine || activeEngine;
+        updateEngineToggle();
+      })
+      .catch(() => {
+        // fallback to old endpoint
+        fetch(`${API}/api/msf/status`)
+          .then(r=>r.json())
+          .then(updateMsfUI)
+          .catch(()=>{});
+      });
   };
   check();
-  // Poll every 5s so the badge updates as soon as MSF finishes booting
   setInterval(check, 5000);
 }
 
 function updateMsfUI(data) {
+  if (!data) return;
   const dot    = $('msf-dot');
   const badge  = $('msf-badge');
   const label  = $('msf-label');
   const hint   = $('msf-hint');
+  if (!dot) return;
 
   msfInstalled = data.installed;
   const wasReady = msfReady;
@@ -183,15 +198,88 @@ function updateMsfUI(data) {
     badge.textContent = 'ONLINE';
     label.textContent = 'CONNECTED';
     hint.className  = 'msf-hint ok';
-    hint.textContent = 'msfconsole process is running and ready';
+    hint.textContent = 'msfconsole running and ready';
     if (!wasReady) log('ok', 'Metasploit engine is ONLINE and ready.');
   } else if (msfInstalled) {
     dot.className   = 'msf-dot installing';
     badge.className = 'msf-badge badge-booting';
     badge.textContent = 'BOOTING';
-    label.textContent = 'STARTING UP...';
+    label.textContent = 'STARTING...';
     hint.className  = 'msf-hint';
-    hint.textContent = 'msfconsole found — waiting for initialisation (~30-180s)';
+    hint.textContent = 'msfconsole booting — fast mode (~15-45s). Run: sudo msfdb init to speed up.';
+  } else {
+    dot.className   = 'msf-dot offline';
+    badge.className = 'msf-badge badge-offline';
+    badge.textContent = 'OFFLINE';
+    label.textContent = 'NOT INSTALLED';
+    hint.className  = 'msf-hint err';
+    hint.textContent = 'msfconsole not found — install Metasploit or use Nuclei engine';
+  }
+}
+
+function updateNucleiUI(data) {
+  if (!data) return;
+  const dot   = $('nuclei-dot');
+  const badge = $('nuclei-badge');
+  const label = $('nuclei-label');
+  const hint  = $('nuclei-hint');
+  if (!dot) return;
+
+  if (data.available) {
+    dot.className   = 'msf-dot ready';
+    badge.className = 'msf-badge badge-online';
+    badge.textContent = 'ONLINE';
+    label.textContent = data.version || 'INSTALLED';
+    hint.className  = 'msf-hint ok';
+    hint.textContent = 'nuclei ready — instant start, no boot delay';
+    if ($('btn-nuclei-update')) $('btn-nuclei-update').disabled = false;
+    // Enable scan button only when a host is selected
+    if ($('btn-nuclei-scan') && selectedDevice) $('btn-nuclei-scan').disabled = false;
+  } else {
+    dot.className   = 'msf-dot offline';
+    badge.className = 'msf-badge badge-offline';
+    badge.textContent = 'OFFLINE';
+    label.textContent = 'NOT INSTALLED';
+    hint.className  = 'msf-hint err';
+    hint.textContent = 'Install: sudo apt install nuclei';
+    if ($('btn-nuclei-scan'))   $('btn-nuclei-scan').disabled   = true;
+    if ($('btn-nuclei-update')) $('btn-nuclei-update').disabled = true;
+  }
+}
+
+function updateEngineToggle() {
+  const msfBtn    = $('engine-btn-msf');
+  const nucleiBtn = $('engine-btn-nuclei');
+  const msfPanel    = $('msf-engine-panel');
+  const nucleiPanel = $('nuclei-engine-panel');
+  if (!msfBtn || !nucleiBtn) return;
+  msfBtn.classList.toggle('active', activeEngine === 'msf');
+  nucleiBtn.classList.toggle('active', activeEngine === 'nuclei');
+  if (msfPanel)    msfPanel.style.display    = activeEngine === 'msf'    ? '' : 'none';
+  if (nucleiPanel) nucleiPanel.style.display = activeEngine === 'nuclei' ? '' : 'none';
+}
+
+function selectEngine(engine) {
+  fetch(`${API}/api/engine/select`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({engine})
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.success) {
+      activeEngine = engine;
+      updateEngineToggle();
+      log('info', `Active scan engine switched to: ${engine.toUpperCase()}`);
+    }
+  })
+  .catch(() => {
+    // API not available yet — still switch UI locally
+    activeEngine = engine;
+    updateEngineToggle();
+    log('info', `Engine UI switched to: ${engine.toUpperCase()}`);
+  });
+}
   } else {
     dot.className   = 'msf-dot offline';
     badge.className = 'msf-badge badge-offline';
@@ -290,12 +378,16 @@ window.showHostDetails = function(dev) {
   }
 
   $('btn-exploit').disabled = false;
+  // Enable nuclei scan button if nuclei is available
+  const nb = $('btn-nuclei-scan');
+  if (nb && !nb.classList.contains('nuclei-unavailable')) nb.disabled = false;
 };
 
 $('btn-close-card').addEventListener('click', ()=>{
   $('host-card').classList.add('hidden');
   selectedDevice = null;
   $('btn-exploit').disabled = true;
+  if ($('btn-nuclei-scan')) $('btn-nuclei-scan').disabled = true;
 });
 
 // ── Port Scan ─────────────────────────────────────────────────────────────────
@@ -344,7 +436,7 @@ $('btn-scan-ports').addEventListener('click', ()=>{
   });
 });
 
-// ── Exploit / Run Module ──────────────────────────────────────────────────────
+// ── Exploit / Run MSF Module ──────────────────────────────────────────────────
 $('btn-exploit').addEventListener('click', ()=>{
   const mod = $('exploit-select').value;
   if (!selectedDevice || !mod) {
@@ -352,7 +444,7 @@ $('btn-exploit').addEventListener('click', ()=>{
     return;
   }
   const ip = selectedDevice.ip;
-  log('info', `Triggering module [${mod}] against ${ip}...`);
+  log('info', `Triggering MSF module [${mod}] against ${ip}...`);
   $('btn-exploit').disabled = true;
   $('btn-exploit').innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> RUNNING...';
   setActivity('EXPLOITING', true);
@@ -365,7 +457,7 @@ $('btn-exploit').addEventListener('click', ()=>{
   .then(r=>r.json())
   .then(data=>{
     $('btn-exploit').disabled = false;
-    $('btn-exploit').innerHTML = '<i class="fa-solid fa-bolt-lightning"></i> RUN ASSESSMENT';
+    $('btn-exploit').innerHTML = '<i class="fa-solid fa-bolt-lightning"></i> RUN MSF MODULE';
     setActivity('IDLE', false);
 
     if (data.success) {
@@ -382,7 +474,83 @@ $('btn-exploit').addEventListener('click', ()=>{
   })
   .catch(e=>{
     $('btn-exploit').disabled = false;
-    $('btn-exploit').innerHTML = '<i class="fa-solid fa-bolt-lightning"></i> RUN ASSESSMENT';
+    $('btn-exploit').innerHTML = '<i class="fa-solid fa-bolt-lightning"></i> RUN MSF MODULE';
     log('err', `Connection error: ${e.message}`);
   });
 });
+
+// ── Nuclei Scan Button ────────────────────────────────────────────────────────
+const btnNuclei = $('btn-nuclei-scan');
+if (btnNuclei) {
+  btnNuclei.addEventListener('click', ()=>{
+    if (!selectedDevice) {
+      log('warn', 'Select a target host first.');
+      return;
+    }
+    const ip  = selectedDevice.ip;
+    const sev = ($('nuclei-severity-select')||{}).value || 'critical,high,medium';
+    log('info', `Nuclei scan on ${ip} [${sev}] — starting...`);
+    btnNuclei.disabled = true;
+    btnNuclei.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> SCANNING...';
+    setActivity('SCANNING', true);
+
+    fetch(`${API}/api/nuclei/scan`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ip, severities: sev.split(',') })
+    })
+    .then(r=>r.json())
+    .then(data=>{
+      btnNuclei.disabled = false;
+      btnNuclei.innerHTML = '<i class="fa-solid fa-atom"></i> RUN NUCLEI SCAN';
+      setActivity('IDLE', false);
+
+      if (data.success) {
+        const count = data.count || 0;
+        log('ok', `Nuclei scan complete: ${count} finding(s) on ${ip}`);
+        (data.findings||[]).forEach(f=>{
+          const sev = (f.severity||'info').toUpperCase();
+          log(sev==='CRITICAL'||sev==='HIGH' ? 'err' : 'warn',
+              `[${sev}] ${f.name} — ${f.matched||ip}`);
+        });
+        // Update device state
+        const idx = currentDevices.findIndex(x=>x.ip===ip);
+        if (idx!==-1) {
+          currentDevices[idx].nuclei_findings = data.findings;
+          if (count > 0) currentDevices[idx].risk = 'Vulnerable';
+          window.showHostDetails(currentDevices[idx]);
+        }
+      } else {
+        log('err', `Nuclei scan failed: ${data.error||'unknown error'}`);
+      }
+    })
+    .catch(e=>{
+      btnNuclei.disabled = false;
+      btnNuclei.innerHTML = '<i class="fa-solid fa-atom"></i> RUN NUCLEI SCAN';
+      log('err', `Nuclei error: ${e.message}`);
+    });
+  });
+}
+
+// ── Nuclei Update Templates Button ────────────────────────────────────────────
+const btnNucleiUpdate = $('btn-nuclei-update');
+if (btnNucleiUpdate) {
+  btnNucleiUpdate.addEventListener('click', ()=>{
+    log('info', 'Updating nuclei templates...');
+    btnNucleiUpdate.disabled = true;
+    btnNucleiUpdate.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> UPDATING...';
+    fetch(`${API}/api/nuclei/update`, { method: 'POST' })
+      .then(r=>r.json())
+      .then(data=>{
+        btnNucleiUpdate.disabled = false;
+        btnNucleiUpdate.innerHTML = '<i class="fa-solid fa-arrow-rotate-right"></i> UPDATE TEMPLATES';
+        if (data.success) log('ok', 'Nuclei templates updated successfully.');
+        else log('err', 'Template update failed.');
+      })
+      .catch(()=>{
+        btnNucleiUpdate.disabled = false;
+        btnNucleiUpdate.innerHTML = '<i class="fa-solid fa-arrow-rotate-right"></i> UPDATE TEMPLATES';
+        log('err', 'Could not reach server for template update.');
+      });
+  });
+}

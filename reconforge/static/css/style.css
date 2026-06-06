@@ -486,3 +486,54 @@ kbd {
 .log-warn { color: var(--orange); }
 .log-err  { color: var(--red); }
 .log-dim  { color: var(--txt-dim); }
+
+/* ── Engine Toggle ────────────────────────────────────────────────────────── */
+.engine-toggle {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.engine-btn {
+  flex: 1;
+  padding: 7px 4px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--txt-dim);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+.engine-btn:hover {
+  border-color: var(--green);
+  color: var(--green);
+  background: rgba(0,255,157,0.05);
+}
+
+.engine-btn.active {
+  border-color: var(--green);
+  color: var(--green);
+  background: rgba(0,255,157,0.10);
+  box-shadow: 0 0 8px rgba(0,255,157,0.15);
+}
+
+#nuclei-engine-panel .btn-secondary {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--txt-dim);
+  font-size: 10px;
+}
+
+#nuclei-engine-panel .btn-secondary:hover:not(:disabled) {
+  border-color: var(--cyan);
+  color: var(--cyan);
+}

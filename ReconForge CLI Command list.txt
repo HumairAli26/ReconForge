@@ -1,0 +1,95 @@
+================================================================================
+  RECONFORGE — CLI COMMAND SHEET
+================================================================================
+
+────────────────────────────────────────────────────────────────────────────────
+  MODES — pick one
+────────────────────────────────────────────────────────────────────────────────
+
+  reconforge --sweep                          Auto-detect subnet → sweep all hosts
+  reconforge --sweep -t 192.168.1.0/24       Sweep a specific subnet
+  reconforge -t 192.168.1.5 --no-msf         Deep-scan single host (Python only)
+  reconforge --web                            Launch 3D web dashboard (browser)
+  reconforge --interactive                    Interactive TUI menu
+
+────────────────────────────────────────────────────────────────────────────────
+  SWEEP OPTIONS  (combine with --sweep)
+────────────────────────────────────────────────────────────────────────────────
+
+  --sweep --ports                             Sweep + port-scan every host found
+  --sweep -t 10.0.0.0/24 --ports             Sweep subnet + scan all ports
+  --sweep --ports -o report.html             Save HTML report to custom file
+  --sweep --ports --no-msf                   Sweep + scan, no Metasploit needed [recommended]
+
+────────────────────────────────────────────────────────────────────────────────
+  SINGLE-HOST DEEP SCAN
+────────────────────────────────────────────────────────────────────────────────
+
+  -t 192.168.1.1 --no-msf                    Deep scan, Python probes only
+  -t 192.168.1.1 --lhost 192.168.1.100       Deep scan with Metasploit + lhost
+  -t 192.168.1.1 -p 8080,9000-9100           Extra ports to scan
+  -t 192.168.1.1 -c "Port Scanning"          Restrict to specific module category
+  -t 192.168.1.1 --threads 200 --timeout 2   Custom thread count + timeout
+
+────────────────────────────────────────────────────────────────────────────────
+  METASPLOIT OPTIONS
+────────────────────────────────────────────────────────────────────────────────
+
+  --no-msf                                    Skip MSF entirely, use Python scanners
+  --lhost <your-ip> --lport 4444             Local IP + port for reverse payloads
+  --msf-path /opt/msf/bin/msfconsole         Custom path to msfconsole binary
+
+────────────────────────────────────────────────────────────────────────────────
+  WEB DASHBOARD OPTIONS  (combine with --web)
+────────────────────────────────────────────────────────────────────────────────
+
+  --web --web-host 0.0.0.0 --web-port 8080   Bind to all interfaces on port 8080
+  --web --no-banner                           Launch web GUI without ASCII banner
+
+────────────────────────────────────────────────────────────────────────────────
+  OUTPUT
+────────────────────────────────────────────────────────────────────────────────
+
+  -o my_report.html                           Save report to custom filename
+  --no-banner                                 Suppress the ASCII banner on startup
+
+────────────────────────────────────────────────────────────────────────────────
+  UTILITIES
+────────────────────────────────────────────────────────────────────────────────
+
+  reconforge --check-deps                     Check nmap, msfconsole are on PATH
+  reconforge --list-modules                   Show all 46 MSF modules in catalogue
+  reconforge --list-categories                Show module categories + counts
+  reconforge --version                        Print version and exit
+  reconforge --help                           Full help with all flags
+
+────────────────────────────────────────────────────────────────────────────────
+  COMMON RECIPES
+────────────────────────────────────────────────────────────────────────────────
+
+  Full sweep + port scan + HTML report, no Metasploit required:
+    reconforge --sweep --ports --no-msf -o scan.html
+
+  Fast deep-scan of one host with extra ports + high thread count:
+    reconforge -t 192.168.1.5 --no-msf -p 22,80,443,8080-8090 --threads 200
+
+  MSF vuln-check only on one host:
+    reconforge -t 192.168.1.5 --lhost 192.168.1.100 -c "Vulnerability Checks"
+
+  Web dashboard accessible from other machines on the LAN:
+    reconforge --web --web-host 0.0.0.0
+
+────────────────────────────────────────────────────────────────────────────────
+  MODULE CATEGORIES  (use with -c flag)
+────────────────────────────────────────────────────────────────────────────────
+
+  "Port Scanning"
+  "Service Fingerprinting"
+  "Host Discovery"
+  "SMB / Windows"
+  "Vulnerability Checks"
+  "Web Reconnaissance"
+  "Web App Checks"
+  "DNS"
+
+================================================================================

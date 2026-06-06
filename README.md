@@ -10,11 +10,11 @@ ReconForge is a powerful, cross-distribution Linux recon tool that performs host
 
 ## Features
 
-- **Host Discovery** — ARP & ICMP-based host detection on local networks
-- **Port Scanning** — Fast multi-threaded TCP port scanner (no nmap required for basic scans)
+- **Host Discovery** — Triple-method: nmap (primary) + ARP sweep (Scapy) + parallel ICMP/TCP/UDP probe — finds all devices including those that block ping
+- **Port Scanning** — Full 65,535-port scan in two phases; top-1000 ports first for speed, then full sweep; nmap service version detection on found ports
 - **Service Enumeration** — Banner grabbing, HTTP headers, SSL cert inspection
 - **DNS Recon** — A, AAAA, MX, NS, TXT, CNAME lookups
-- **Metasploit Integration** — Optional MSF auxiliary module runner (offline-safe)
+- **Metasploit Integration** — Fast-boot mode (skips DB init, ~15-45s vs ~2-3min); optional MSF auxiliary module runner (offline-safe)
 - **Interactive TUI** — Menu-driven session for guided assessments
 - **JSON Reports** — Structured output saved automatically after each scan
 - **Offline Mode** — Full functionality without Metasploit installed
@@ -35,19 +35,31 @@ reconforge -t <target>
 
 ---
 
-## Full Install (Recommended)
+## Full Install (Recommended — Zero chmod needed)
 
 ```bash
 # 1. Clone
 git clone https://github.com/humairali/ReconForge.git
 cd ReconForge
 
-# 2. Run installer (handles system deps + venv)
-chmod +x install.sh
-sudo ./install.sh
+# 2. Run installer — no chmod needed, just:
+sudo bash install.sh
 
 # 3. Done — run it
 reconforge --help
+```
+
+Or even simpler — auto-installs on first run:
+
+```bash
+bash run.sh -t <target>
+```
+
+Or with make:
+
+```bash
+make install   # install
+make run       # install if needed + launch
 ```
 
 ---

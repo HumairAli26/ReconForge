@@ -19,7 +19,7 @@ LONG_DESC = (HERE / "README.md").read_text(encoding="utf-8")
 
 setup(
     name="reconforge",
-    version="1.0.0",
+    version="3.4.0",
     author="Humair Ali",
     description="Network Discovery and Security Assessment Platform",
     long_description=LONG_DESC,

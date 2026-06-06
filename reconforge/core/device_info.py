@@ -16,14 +16,21 @@ import re
 from datetime import datetime
 
 # ── mac-vendor-lookup (optional, best accuracy) ───────────────────────────────
+import threading
+
 try:
     from mac_vendor_lookup import MacLookup, VendorNotFoundError
     _mac_lookup = MacLookup()
-    try:
-        _mac_lookup.update_vendors()       # pull fresh IEEE DB if network available
-    except Exception:
-        pass                               # fine — uses cached DB
     MAC_LOOKUP_OK = True
+
+    def _bg_update():
+        try:
+            _mac_lookup.update_vendors()   # refresh IEEE DB in background — never blocks app boot
+        except Exception:
+            pass
+
+    threading.Thread(target=_bg_update, daemon=True).start()
+
 except ImportError:
     _mac_lookup = None
     MAC_LOOKUP_OK = False

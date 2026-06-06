@@ -1,29 +1,14 @@
-// app.js — ReconForge Frontend Controller v3.4
-// Features: async scans, engine selector, shutdown on tab close
+// ReconForge v4 — Frontend Controller
+// Key fixes: background scan polling, dual engine, non-blocking UI
 
-const API = '';   // same-origin
-let currentDevices  = [];
-let selectedDevice  = null;
-let logCount        = 0;
-let msfReady        = false;
-let msfInstalled    = false;
+const API = '';
+let devices       = [];
+let selectedDev   = null;
+let logCount      = 0;
+let activeEngine  = 'msf';
+let netScanTimer  = null;
+let portScanTimer = {};
 
-// ── Shutdown server when tab/browser closes ───────────────────────────────────
-window.addEventListener('beforeunload', () => {
-  // Use sendBeacon for reliability during page unload
-  navigator.sendBeacon(`${API}/api/shutdown`, JSON.stringify({reason: 'browser closed'}));
-});
-
-// ── Heartbeat — detect if server died externally ──────────────────────────────
-setInterval(() => {
-  fetch(`${API}/api/ping`, { cache: 'no-store' })
-    .catch(() => {
-      // Server gone — show disconnected state
-      document.title = '⚠ ReconForge — Disconnected';
-    });
-}, 10000);
-
-// ── DOM refs ──────────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
@@ -31,96 +16,76 @@ document.addEventListener('DOMContentLoaded', () => {
   startClock();
   startBgCanvas();
   detectSubnet();
-  loadModules();
-  pollMsfStatus();      // start polling immediately
-  log('info', 'ReconForge v1.0 initialised. Checking system status...');
+  loadMsfModules();
+  pollEngineStatus();   // polls both MSF + Nuclei every 5s
+  log('info', 'ReconForge v4.0 initialised.');
+  log('dim',  'Web app is fully functional while MSF boots in background.');
 });
 
 // ── Clock ─────────────────────────────────────────────────────────────────────
 function startClock() {
   const tick = () => {
-    const now = new Date();
-    $('sys-time').textContent = now.toTimeString().slice(0,8);
-    $('sys-date').textContent = now.toISOString().slice(0,10);
+    const n = new Date();
+    $('sys-time').textContent = n.toTimeString().slice(0,8);
+    $('sys-date').textContent = n.toISOString().slice(0,10);
   };
-  tick();
-  setInterval(tick, 1000);
+  tick(); setInterval(tick, 1000);
 }
 
-// ── Particle background canvas ────────────────────────────────────────────────
+// ── Particle canvas ───────────────────────────────────────────────────────────
 function startBgCanvas() {
-  const c = $('bg-canvas');
-  if (!c) return;
+  const c = $('bg-canvas'); if (!c) return;
   const ctx = c.getContext('2d');
-  let W, H, particles = [];
-  const resize = () => {
-    W = c.width  = window.innerWidth;
-    H = c.height = window.innerHeight;
-  };
-  resize();
-  window.addEventListener('resize', resize);
-  for (let i = 0; i < 60; i++) particles.push({
+  let W, H, pts = [];
+  const resize = () => { W = c.width = innerWidth; H = c.height = innerHeight; };
+  resize(); addEventListener('resize', resize);
+  for (let i = 0; i < 55; i++) pts.push({
     x: Math.random()*W, y: Math.random()*H,
-    vx: (Math.random()-0.5)*0.3, vy: (Math.random()-0.5)*0.3,
-    r: Math.random()*1.5+0.3
+    vx:(Math.random()-.5)*.25, vy:(Math.random()-.5)*.25, r:Math.random()*1.4+.3
   });
   const draw = () => {
     ctx.clearRect(0,0,W,H);
-    particles.forEach(p => {
-      p.x += p.vx; p.y += p.vy;
-      if (p.x<0) p.x=W; if (p.x>W) p.x=0;
-      if (p.y<0) p.y=H; if (p.y>H) p.y=0;
-      ctx.beginPath();
-      ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
-      ctx.fillStyle='rgba(0,255,157,0.6)'; ctx.fill();
+    pts.forEach(p => {
+      p.x+=p.vx; p.y+=p.vy;
+      if(p.x<0)p.x=W; if(p.x>W)p.x=0;
+      if(p.y<0)p.y=H; if(p.y>H)p.y=0;
+      ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+      ctx.fillStyle='rgba(0,255,157,0.55)'; ctx.fill();
     });
-    // draw proximity lines
-    for (let i=0;i<particles.length;i++) for (let j=i+1;j<particles.length;j++) {
-      const dx=particles[i].x-particles[j].x, dy=particles[i].y-particles[j].y;
-      const d=Math.sqrt(dx*dx+dy*dy);
-      if (d<130) {
-        ctx.beginPath();
-        ctx.moveTo(particles[i].x,particles[i].y);
-        ctx.lineTo(particles[j].x,particles[j].y);
-        ctx.strokeStyle=`rgba(0,255,157,${0.12*(1-d/130)})`;
-        ctx.lineWidth=0.5; ctx.stroke();
-      }
+    for(let i=0;i<pts.length;i++) for(let j=i+1;j<pts.length;j++){
+      const dx=pts[i].x-pts[j].x, dy=pts[i].y-pts[j].y, d=Math.sqrt(dx*dx+dy*dy);
+      if(d<120){ctx.beginPath();ctx.moveTo(pts[i].x,pts[i].y);ctx.lineTo(pts[j].x,pts[j].y);
+        ctx.strokeStyle=`rgba(0,255,157,${.1*(1-d/120)})`;ctx.lineWidth=.5;ctx.stroke();}
     }
     requestAnimationFrame(draw);
-  };
-  draw();
+  }; draw();
 }
 
-// ── Console logger ────────────────────────────────────────────────────────────
+// ── Logger ────────────────────────────────────────────────────────────────────
 function log(type, msg) {
   logCount++;
   $('log-count').textContent = `${logCount} entries`;
-  const body = $('console-output');
-  const now  = new Date().toTimeString().slice(0,8);
-
-  const prefixes = { ok:'[+]', info:'[*]', warn:'[-]', err:'[!]', dim:'   ' };
-  const prefix   = prefixes[type] || '[*]';
-
   const div = document.createElement('div');
   div.className = 'log-line';
-  div.innerHTML = `<span class="log-ts">${now}</span><span class="log-${type}">${prefix} ${escHtml(msg)}</span>`;
-  body.appendChild(div);
-  body.scrollTop = body.scrollHeight;
+  const ts = new Date().toTimeString().slice(0,8);
+  const pre = {ok:'[+]',info:'[*]',warn:'[-]',err:'[!]',dim:'   ',nuc:'[N]'}[type]||'[*]';
+  div.innerHTML = `<span class="log-ts">${ts}</span><span class="log-${type}">${pre} ${esc(msg)}</span>`;
+  const b = $('console-out');
+  b.appendChild(div);
+  b.scrollTop = b.scrollHeight;
 }
-
-function escHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-
-$('btn-clear').addEventListener('click', () => {
-  $('console-output').innerHTML = '';
-  logCount = 0; $('log-count').textContent = '0 entries';
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+$('btn-clear-log').addEventListener('click', () => {
+  $('console-out').innerHTML = ''; logCount = 0; $('log-count').textContent = '0 entries';
 });
 
-// ── Activity indicator ────────────────────────────────────────────────────────
-function setActivity(label, active=true) {
-  $('activity-label').textContent = label;
-  document.querySelector('.activity-dot').classList.toggle('active', active);
+// ── Activity HUD ──────────────────────────────────────────────────────────────
+function setActivity(label, state='idle') {
+  $('act-label').textContent = label;
+  const dot = $('act-dot');
+  dot.className = 'act-dot';
+  if (state === 'scan')   dot.classList.add('active');
+  if (state === 'nuclei') dot.classList.add('nuclei-active');
 }
 
 // ── Subnet detect ─────────────────────────────────────────────────────────────
@@ -128,500 +93,417 @@ $('btn-detect').addEventListener('click', detectSubnet);
 function detectSubnet() {
   fetch(`${API}/api/network/detect`)
     .then(r=>r.json())
-    .then(d=>{ $('target-subnet').value=d.network; log('ok',`Auto-detected network: ${d.network}`); })
-    .catch(()=>log('warn','Could not auto-detect network.'));
+    .then(d=>{ $('inp-subnet').value=d.network; log('ok',`Auto-detected: ${d.network}`); })
+    .catch(()=>log('warn','Auto-detect failed — check Flask server.'));
 }
 
-// ── Host Discovery — async with progress polling ───────────────────────────
-$('btn-scan-network').addEventListener('click', () => {
-  const net = $('target-subnet').value.trim();
-  if (!net) return;
-  log('info', `Starting sweep on: ${net} — you can use other features while scanning`);
-  setActivity('SCANNING', true);
-  $('btn-scan-network').disabled = true;
-  $('btn-scan-network').innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> SCANNING...';
+// ── Engine selector ───────────────────────────────────────────────────────────
+function switchEngine(eng) {
+  activeEngine = eng;
+  $('tab-msf').classList.toggle('active', eng==='msf');
+  $('tab-nuclei').classList.toggle('active', eng==='nuclei');
+  $('engine-msf-panel').style.display    = eng==='msf'    ? '' : 'none';
+  $('engine-nuclei-panel').style.display = eng==='nuclei' ? '' : 'none';
 
-  // Kick off background scan
-  fetch(`${API}/api/scan/network`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ network: net })
-  })
-  .then(r => r.json())
-  .then(data => {
-    if (!data.success && data.error) {
-      log('err', `Scan error: ${data.error}`);
-      $('btn-scan-network').disabled = false;
-      $('btn-scan-network').innerHTML = '<i class="fa-solid fa-radar"></i> DISCOVER HOSTS';
-      setActivity('IDLE', false);
-      return;
-    }
-    // Poll for results every 2 seconds
-    let lastCount = 0;
-    const poll = setInterval(() => {
-      fetch(`${API}/api/scan/network/status`)
-        .then(r => r.json())
-        .then(s => {
-          // Show new devices as they come in
-          if (s.count > lastCount) {
-            const newDevs = s.devices.slice(lastCount);
-            newDevs.forEach(d => {
-              log('ok', `Found: ${d.ip.padEnd(16)} ${(d.hostname||'Unknown').padEnd(24)} ${d.vendor||''}`);
-            });
-            lastCount = s.count;
-            currentDevices = s.devices;
-            $('stat-devices').textContent = currentDevices.length;
-            if (typeof updateNetworkTopology === 'function') updateNetworkTopology(currentDevices);
-          }
-          // Update progress bar label
-          if (s.total > 0) {
-            const pct = Math.round((s.progress / s.total) * 100);
-            $('btn-scan-network').innerHTML =
-              `<i class="fa-solid fa-spinner fa-spin"></i> ${pct}% (${s.count} found)`;
-          }
-          // Scan done
-          if (!s.scanning) {
-            clearInterval(poll);
-            $('btn-scan-network').disabled = false;
-            $('btn-scan-network').innerHTML = '<i class="fa-solid fa-radar"></i> DISCOVER HOSTS';
-            setActivity('IDLE', false);
-            currentDevices = s.devices;
-            $('stat-devices').textContent = currentDevices.length;
-            if (currentDevices.length === 0) {
-              log('warn', 'No hosts found. Try running with sudo for ARP scanning.');
-            } else {
-              log('ok', `Sweep complete — ${currentDevices.length} host(s) found on ${net}`);
-            }
-            if (typeof updateNetworkTopology === 'function') updateNetworkTopology(currentDevices);
-          }
-        })
-        .catch(() => clearInterval(poll));
-    }, 2000);
-  })
-  .catch(e => {
-    $('btn-scan-network').disabled = false;
-    $('btn-scan-network').innerHTML = '<i class="fa-solid fa-radar"></i> DISCOVER HOSTS';
-    setActivity('ERROR', false);
-    log('err', `Sweep error: ${e.message}`);
-  });
-});
+  fetch(`${API}/api/engine/select`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({engine: eng})
+  }).catch(()=>{});
 
-// ── Engine state ───────────────────────────────────────────────────────────────
-let activeEngine = 'msf';  // 'msf' or 'nuclei'
+  log('info', `Active engine → ${eng.toUpperCase()}`);
+  updateExploitButton();
+}
 
-// ── MSF + Nuclei Status polling ────────────────────────────────────────────────
-function pollMsfStatus() {
+// ── Poll both engines every 5s ────────────────────────────────────────────────
+function pollEngineStatus() {
   const check = () => {
     fetch(`${API}/api/engine/status`)
       .then(r=>r.json())
-      .then(data => {
-        updateMsfUI(data.msf);
-        updateNucleiUI(data.nuclei);
-        activeEngine = data.active_engine || activeEngine;
-        updateEngineToggle();
+      .then(d=>{
+        updateMsfUI(d.msf);
+        updateNucleiUI(d.nuclei);
+        updateExploitButton();
       })
-      .catch(() => {
-        // fallback to old endpoint
-        fetch(`${API}/api/msf/status`)
-          .then(r=>r.json())
-          .then(updateMsfUI)
-          .catch(()=>{});
-      });
+      .catch(()=>{});
   };
-  check();
-  setInterval(check, 5000);
+  check(); setInterval(check, 5000);
 }
 
-function updateMsfUI(data) {
-  if (!data) return;
-  const dot    = $('msf-dot');
-  const badge  = $('msf-badge');
-  const label  = $('msf-label');
-  const hint   = $('msf-hint');
-  if (!dot) return;
+function updateMsfUI(msf) {
+  const dot   = $('msf-dot');
+  const badge = $('msf-badge');
+  const label = $('msf-label');
+  const hint  = $('msf-hint');
+  const was   = dot.classList.contains('ready');
 
-  msfInstalled = data.installed;
-  const wasReady = msfReady;
-  msfReady     = data.available;
-
-  if (msfReady) {
-    dot.className   = 'msf-dot ready';
-    badge.className = 'msf-badge badge-online';
-    badge.textContent = 'ONLINE';
+  if (msf.available) {
+    dot.className = 'status-dot ready';
+    badge.className = 'status-badge badge-on'; badge.textContent = 'ONLINE';
     label.textContent = 'CONNECTED';
-    hint.className  = 'msf-hint ok';
-    hint.textContent = 'msfconsole running and ready';
-    if (!wasReady) log('ok', 'Metasploit engine is ONLINE and ready.');
-  } else if (msfInstalled) {
-    dot.className   = 'msf-dot installing';
-    badge.className = 'msf-badge badge-booting';
-    badge.textContent = 'BOOTING';
+    hint.className = 'engine-hint ok'; hint.textContent = 'msfconsole ready ✓';
+    if (!was) log('ok', 'Metasploit engine is ONLINE.');
+  } else if (msf.installed) {
+    dot.className = 'status-dot booting';
+    badge.className = 'status-badge badge-boot'; badge.textContent = 'BOOTING';
     label.textContent = 'STARTING...';
-    hint.className  = 'msf-hint';
-    hint.textContent = 'msfconsole booting — fast mode (~15-45s). Run: sudo msfdb init to speed up.';
+    hint.className = 'engine-hint'; hint.textContent = 'msfdb + msfconsole starting (~30-120s)';
   } else {
-    dot.className   = 'msf-dot offline';
-    badge.className = 'msf-badge badge-offline';
-    badge.textContent = 'OFFLINE';
-    label.textContent = 'NOT INSTALLED';
-    hint.className  = 'msf-hint err';
-    hint.textContent = 'msfconsole not found — install Metasploit or use Nuclei engine';
+    dot.className = 'status-dot offline';
+    badge.className = 'status-badge badge-off'; badge.textContent = 'OFFLINE';
+    label.textContent = 'NOT FOUND';
+    hint.className = 'engine-hint err'; hint.textContent = 'Install Metasploit or use Nuclei engine';
+    if (!was) log('warn', 'Metasploit not found — switch to Nuclei engine.');
   }
 }
 
-function updateNucleiUI(data) {
-  if (!data) return;
+function updateNucleiUI(nuc) {
   const dot   = $('nuclei-dot');
   const badge = $('nuclei-badge');
   const label = $('nuclei-label');
   const hint  = $('nuclei-hint');
-  if (!dot) return;
 
-  if (data.available) {
-    dot.className   = 'msf-dot ready';
-    badge.className = 'msf-badge badge-online';
-    badge.textContent = 'ONLINE';
-    label.textContent = data.version || 'INSTALLED';
-    hint.className  = 'msf-hint ok';
-    hint.textContent = 'nuclei ready — instant start, no boot delay';
-    if ($('btn-nuclei-update')) $('btn-nuclei-update').disabled = false;
-    // Enable scan button only when a host is selected
-    if ($('btn-nuclei-scan') && selectedDevice) $('btn-nuclei-scan').disabled = false;
+  if (nuc.available) {
+    dot.className = 'status-dot online nuclei';
+    badge.className = 'status-badge badge-nuc'; badge.textContent = 'READY';
+    label.textContent = nuc.version || 'Installed';
+    hint.className = 'engine-hint nuc'; hint.textContent = 'Instant-start • thousands of templates';
+    $('btn-run-nuclei').disabled = !selectedDev;
   } else {
-    dot.className   = 'msf-dot offline';
-    badge.className = 'msf-badge badge-offline';
-    badge.textContent = 'OFFLINE';
+    dot.className = 'status-dot offline';
+    badge.className = 'status-badge badge-off'; badge.textContent = 'OFFLINE';
     label.textContent = 'NOT INSTALLED';
-    hint.className  = 'msf-hint err';
-    hint.textContent = 'Install: sudo apt install nuclei';
-    if ($('btn-nuclei-scan'))   $('btn-nuclei-scan').disabled   = true;
-    if ($('btn-nuclei-update')) $('btn-nuclei-update').disabled = true;
+    hint.className = 'engine-hint err'; hint.textContent = 'sudo apt install nuclei';
+    $('btn-run-nuclei').disabled = true;
   }
 }
 
-function updateEngineToggle() {
-  const msfBtn    = $('engine-btn-msf');
-  const nucleiBtn = $('engine-btn-nuclei');
-  const msfPanel    = $('msf-engine-panel');
-  const nucleiPanel = $('nuclei-engine-panel');
-  if (!msfBtn || !nucleiBtn) return;
-  msfBtn.classList.toggle('active', activeEngine === 'msf');
-  nucleiBtn.classList.toggle('active', activeEngine === 'nuclei');
-  if (msfPanel)    msfPanel.style.display    = activeEngine === 'msf'    ? '' : 'none';
-  if (nucleiPanel) nucleiPanel.style.display = activeEngine === 'nuclei' ? '' : 'none';
+function updateExploitButton() {
+  const msfReady    = $('msf-dot').classList.contains('ready');
+  const nucleiReady = $('nuclei-dot').classList.contains('online');
+  $('btn-run-msf').disabled    = !(msfReady && selectedDev);
+  $('btn-run-nuclei').disabled = !(nucleiReady && selectedDev);
 }
 
-function selectEngine(engine) {
-  fetch(`${API}/api/engine/select`, {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({engine})
-  })
-  .then(r => r.json())
-  .then(data => {
-    if (data.success) {
-      activeEngine = engine;
-      updateEngineToggle();
-      log('info', `Active scan engine switched to: ${engine.toUpperCase()}`);
-    }
-  })
-  .catch(() => {
-    // API not available yet — still switch UI locally
-    activeEngine = engine;
-    updateEngineToggle();
-    log('info', `Engine UI switched to: ${engine.toUpperCase()}`);
-  });
-}
-  } else {
-    dot.className   = 'msf-dot offline';
-    badge.className = 'msf-badge badge-offline';
-    badge.textContent = 'OFFLINE';
-    label.textContent = 'NOT INSTALLED';
-    hint.className  = 'msf-hint err';
-    hint.textContent = 'msfconsole not found — use --no-msf CLI flag';
-    log('warn', 'Metasploit not detected. Modules will run in Python-only mode.');
-  }
-}
-
-// ── Load modules ──────────────────────────────────────────────────────────────
-function loadModules() {
+// ── Load MSF modules ──────────────────────────────────────────────────────────
+function loadMsfModules() {
   fetch(`${API}/api/msf/modules`)
     .then(r=>r.json())
     .then(data=>{
-      const sel = $('exploit-select');
+      const sel = $('msf-module-sel');
       sel.innerHTML = '<option value="">— select module —</option>';
-
-      // Group by category
       const cats = {};
       data.modules.forEach(m=>{
-        if (!cats[m.category]) cats[m.category] = [];
+        if(!cats[m.category]) cats[m.category]=[];
         cats[m.category].push(m);
       });
-
-      Object.entries(cats).forEach(([cat, mods])=>{
-        const grp = document.createElement('optgroup');
-        grp.label = cat;
+      Object.entries(cats).forEach(([c,mods])=>{
+        const g = document.createElement('optgroup'); g.label = c;
         mods.forEach(m=>{
           const o = document.createElement('option');
-          o.value = m.key;
-          o.textContent = m.key;
-          grp.appendChild(o);
+          o.value = m.key; o.textContent = m.key; g.appendChild(o);
         });
-        sel.appendChild(grp);
+        sel.appendChild(g);
       });
-      log('dim', `${data.modules.length} MSF modules loaded into catalogue.`);
-    });
+      log('dim', `${data.modules.length} MSF modules loaded.`);
+    }).catch(()=>{});
 }
 
-// ── Host Details Card ─────────────────────────────────────────────────────────
+// ── Network Scan ──────────────────────────────────────────────────────────────
+$('btn-scan-net').addEventListener('click', startNetScan);
+
+function startNetScan() {
+  const net = $('inp-subnet').value.trim();
+  if (!net) return;
+
+  log('info', `Starting host discovery on: ${net}`);
+  setActivity('SWEEPING', 'scan');
+  $('btn-scan-net').disabled = true;
+  $('btn-scan-net').innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> SCANNING...';
+  $('net-progress-wrap').classList.remove('hidden');
+  $('net-progress-fill').style.width = '0%';
+  $('net-progress-label').textContent = 'Initialising...';
+  devices = [];
+
+  // Kick off background scan
+  fetch(`${API}/api/scan/network`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({network: net})
+  })
+  .then(r=>r.json())
+  .then(d=>{
+    if (d.success || d.status === 'scanning') {
+      // Poll progress
+      netScanTimer = setInterval(pollNetScan, 1500);
+    } else {
+      log('err', d.error || 'Scan failed to start.');
+      resetNetScanUI();
+    }
+  })
+  .catch(e=>{ log('err', e.message); resetNetScanUI(); });
+}
+
+function pollNetScan() {
+  fetch(`${API}/api/scan/network/status`)
+    .then(r=>r.json())
+    .then(d=>{
+      const pct = d.total > 0 ? Math.round((d.progress/d.total)*100) : 0;
+      $('net-progress-fill').style.width = pct + '%';
+      $('net-progress-label').textContent = `${d.count} hosts found — ${pct}% complete`;
+
+      // Add newly found devices
+      if (d.devices && d.devices.length > devices.length) {
+        const newDevs = d.devices.slice(devices.length);
+        newDevs.forEach(dev => {
+          devices.push(dev);
+          log('dim', `  ${dev.ip.padEnd(16)} ${(dev.hostname||'Unknown').padEnd(24)} ${dev.vendor||''}`);
+        });
+        updateStats();
+        if (typeof updateNetworkTopology === 'function') updateNetworkTopology(devices);
+      }
+
+      if (!d.scanning) {
+        clearInterval(netScanTimer);
+        devices = d.devices || devices;
+        log('ok', `Sweep complete — ${devices.length} host(s) on the network.`);
+        if (typeof updateNetworkTopology === 'function') updateNetworkTopology(devices);
+        updateStats();
+        resetNetScanUI();
+        setActivity('IDLE', 'idle');
+      }
+    })
+    .catch(()=>{});
+}
+
+function resetNetScanUI() {
+  $('btn-scan-net').disabled = false;
+  $('btn-scan-net').innerHTML = '<i class="fa-solid fa-radar"></i> DISCOVER HOSTS';
+  setTimeout(()=>$('net-progress-wrap').classList.add('hidden'), 2000);
+}
+
+// ── Host card ─────────────────────────────────────────────────────────────────
 window.showHostDetails = function(dev) {
   if (!dev || dev.ip === 'Gateway') {
     $('host-card').classList.add('hidden');
-    selectedDevice = null;
-    $('btn-exploit').disabled = true;
-    return;
+    selectedDev = null; updateExploitButton(); return;
   }
-  selectedDevice = dev;
+  selectedDev = dev;
   $('host-card').classList.remove('hidden');
-
-  $('host-ip').textContent       = dev.ip       || '—';
-  $('host-mac').textContent      = dev.mac       || '—';
-  $('host-hostname').textContent = dev.hostname  || 'Unknown';
-  $('host-vendor').textContent   = dev.vendor    || 'Unknown';
-  $('host-type').textContent     = dev.device_type || 'Unknown';
+  $('hc-ip').textContent     = dev.ip       || '—';
+  $('hc-mac').textContent    = dev.mac       || '—';
+  $('hc-host').textContent   = dev.hostname  || 'Unknown';
+  $('hc-vendor').textContent = dev.vendor    || 'Unknown';
+  $('hc-type').textContent   = dev.device_type || 'Unknown';
 
   const risk = dev.risk || 'Clean';
-  const rb   = $('host-risk');
+  const rb = $('hc-risk');
   rb.textContent = risk;
-  rb.className   = 'risk-badge ' + (
-    risk === 'Exploited'  ? 'risk-exploited'  :
-    risk === 'Vulnerable' ? 'risk-vulnerable' : 'risk-clean'
-  );
+  rb.className = 'risk-badge ' + ({
+    'Exploited':'risk-exp','Vulnerable':'risk-vuln',
+    'Critical':'risk-crit','Open':'risk-vuln'
+  }[risk] || 'risk-clean');
 
   // Ports
-  const portsBody = $('ports-body');
-  if (dev.open_ports && dev.open_ports.length) {
-    portsBody.innerHTML = dev.open_ports.map(p=>{
-      const svc = dev.services?.[p]?.service || '?';
-      const ban = (dev.services?.[p]?.banner || '').slice(0,40);
-      return `<div class="port-row">
-        <span class="port-num">${p}</span>
-        <span class="port-svc">${escHtml(svc)}</span>
-        <span class="port-ban">${escHtml(ban)}</span>
-      </div>`;
-    }).join('');
+  const pb = $('ports-body');
+  if (dev.open_ports?.length) {
+    pb.innerHTML = dev.open_ports.map(p=>`
+      <div class="port-row">
+        <span class="port-n">${p}</span>
+        <span class="port-s">${esc(dev.services?.[p]?.service||'?')}</span>
+        <span class="port-b">${esc((dev.services?.[p]?.banner||'').slice(0,45))}</span>
+      </div>`).join('');
   } else {
-    portsBody.innerHTML = '<span class="ports-empty">No scan performed yet</span>';
+    pb.innerHTML = '<span class="dim-txt">No scan yet</span>';
   }
 
   // Vulns
-  const vulnsSection = $('vulns-section');
-  const vulnsBody    = $('vulns-body');
-  if (dev.vulns && dev.vulns.length) {
-    vulnsSection.style.display = 'flex';
-    vulnsBody.innerHTML = dev.vulns.map(v=>`
+  const vb = $('vulns-block');
+  if (dev.vulns?.length) {
+    vb.classList.remove('hidden');
+    $('vulns-body').innerHTML = dev.vulns.map(v=>`
       <div class="vuln-row">
-        <span class="vuln-sev sev-${v.severity.toLowerCase()}">${v.severity.toUpperCase()}</span>
-        <span class="vuln-name">${escHtml(v.name)}</span>
-        <span class="vuln-cve">${escHtml(v.cve||'')}</span>
+        <span class="vuln-sev sev-${v.severity?.toLowerCase()}">${(v.severity||'').toUpperCase()}</span>
+        <span class="vuln-name">${esc(v.name)}</span>
+        <span class="vuln-cve">${esc(v.cve||'')}</span>
       </div>`).join('');
-  } else {
-    vulnsSection.style.display = 'none';
-  }
+  } else { vb.classList.add('hidden'); }
 
-  $('btn-exploit').disabled = false;
-  // Enable nuclei scan button if nuclei is available
-  const nb = $('btn-nuclei-scan');
-  if (nb && !nb.classList.contains('nuclei-unavailable')) nb.disabled = false;
+  // Nuclei findings
+  const nb = $('nuclei-block');
+  if (dev.nuclei_findings?.length) {
+    nb.classList.remove('hidden');
+    $('nuclei-body').innerHTML = dev.nuclei_findings.map(f=>`
+      <div class="nuclei-row">
+        <span class="vuln-sev sev-${f.severity}">${f.severity?.toUpperCase()}</span>
+        <span class="vuln-name">${esc(f.name)}</span>
+        <span class="vuln-cve">${esc(f.cve||'')}</span>
+      </div>`).join('');
+  } else { nb.classList.add('hidden'); }
+
+  updateExploitButton();
 };
 
-$('btn-close-card').addEventListener('click', ()=>{
+$('btn-hc-close').addEventListener('click', ()=>{
   $('host-card').classList.add('hidden');
-  selectedDevice = null;
-  $('btn-exploit').disabled = true;
-  if ($('btn-nuclei-scan')) $('btn-nuclei-scan').disabled = true;
+  selectedDev = null; updateExploitButton();
 });
 
-// ── Port Scan ─────────────────────────────────────────────────────────────────
-$('btn-scan-ports').addEventListener('click', ()=>{
-  if (!selectedDevice) return;
-  const ip = selectedDevice.ip;
-  log('info', `Port & service scan on ${ip}...`);
-  setActivity('SCANNING', true);
+// ── Port scan — non-blocking with polling ─────────────────────────────────────
+$('btn-scan-ports').addEventListener('click', startPortScan);
+
+function startPortScan() {
+  if (!selectedDev) return;
+  const ip = selectedDev.ip;
+
+  log('info', `Port scan starting on ${ip}...`);
+  setActivity('PORT SCAN', 'scan');
   $('btn-scan-ports').disabled = true;
   $('btn-scan-ports').innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> SCANNING...';
+  $('port-progress-wrap').classList.remove('hidden');
+  $('port-progress-fill').style.width = '5%';
+  $('port-progress-label').textContent = 'Scanning ports...';
 
   fetch(`${API}/api/scan/ports`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ip })
-  })
-  .then(r => r.json())
-  .then(data => {
-    if (!data.success && data.error) {
-      log('err', `Port scan error: ${data.error}`);
-      $('btn-scan-ports').disabled = false;
-      $('btn-scan-ports').innerHTML = '<i class="fa-solid fa-circle-nodes"></i> SCAN PORTS & SERVICES';
-      setActivity('IDLE', false);
-      return;
-    }
-    // Poll until done
-    let elapsed = 0;
-    const poll = setInterval(() => {
-      elapsed += 3;
-      $('btn-scan-ports').innerHTML =
-        `<i class="fa-solid fa-spinner fa-spin"></i> SCANNING... ${elapsed}s`;
-
-      fetch(`${API}/api/scan/ports/status?ip=${encodeURIComponent(ip)}`)
-        .then(r => r.json())
-        .then(s => {
-          if (s.done && s.device) {
-            clearInterval(poll);
-            $('btn-scan-ports').disabled = false;
-            $('btn-scan-ports').innerHTML = '<i class="fa-solid fa-circle-nodes"></i> SCAN PORTS & SERVICES';
-            setActivity('IDLE', false);
-
-            const d = s.device;
-            const idx = currentDevices.findIndex(x => x.ip === ip);
-            if (idx !== -1) currentDevices[idx] = d; else currentDevices.push(d);
-            window.showHostDetails(d);
-            if (typeof updateNetworkTopology === 'function') updateNetworkTopology(currentDevices);
-
-            const openCount = (d.open_ports||[]).length;
-            const vulnCount = (d.vulns||[]).length;
-            log('ok', `Port scan done for ${ip} — ${openCount} open port(s), ${vulnCount} vuln(s)`);
-
-            const totalOpen  = currentDevices.reduce((s,x) => s+(x.open_ports||[]).length, 0);
-            const totalVulns = currentDevices.filter(x => x.vulns && x.vulns.length).length;
-            $('stat-open').textContent  = totalOpen;
-            $('stat-vulns').textContent = totalVulns;
-          }
-        })
-        .catch(() => clearInterval(poll));
-    }, 3000);
-  })
-  .catch(e => {
-    $('btn-scan-ports').disabled = false;
-    $('btn-scan-ports').innerHTML = '<i class="fa-solid fa-circle-nodes"></i> SCAN PORTS & SERVICES';
-    log('err', `Port scan error: ${e.message}`);
-  });
-});
-
-// ── Exploit / Run MSF Module ──────────────────────────────────────────────────
-$('btn-exploit').addEventListener('click', ()=>{
-  const mod = $('exploit-select').value;
-  if (!selectedDevice || !mod) {
-    log('warn', 'Select a target host and an exploit module first.');
-    return;
-  }
-  const ip = selectedDevice.ip;
-  log('info', `Triggering MSF module [${mod}] against ${ip}...`);
-  $('btn-exploit').disabled = true;
-  $('btn-exploit').innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> RUNNING...';
-  setActivity('EXPLOITING', true);
-
-  fetch(`${API}/api/msf/exploit`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ip, module: mod })
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ip})
   })
   .then(r=>r.json())
-  .then(data=>{
-    $('btn-exploit').disabled = false;
-    $('btn-exploit').innerHTML = '<i class="fa-solid fa-bolt-lightning"></i> RUN MSF MODULE';
-    setActivity('IDLE', false);
-
-    if (data.success) {
-      log('ok', `Module [${mod}] completed against ${ip}`);
-      if (data.output) data.output.split('\n').forEach(l=>l.trim()&&log('dim', l));
-      const idx = currentDevices.findIndex(x=>x.ip===ip);
-      if (idx!==-1) { currentDevices[idx].exploited=true; currentDevices[idx].risk='Exploited'; }
-      window.showHostDetails(currentDevices[idx]||selectedDevice);
-      if (typeof updateNetworkTopology==='function') updateNetworkTopology(currentDevices);
+  .then(d=>{
+    if (d.success || d.status === 'scanning') {
+      // Animate progress while polling
+      let pct = 10;
+      const anim = setInterval(()=>{ pct = Math.min(pct+3,90); $('port-progress-fill').style.width=pct+'%'; }, 800);
+      portScanTimer[ip] = setInterval(()=>pollPortScan(ip, anim), 1500);
     } else {
-      log('err', `Module failed: ${data.error||'check MSF status'}`);
-      if (data.output) log('dim', data.output);
+      log('err', d.error || 'Port scan failed.'); resetPortScanUI();
     }
   })
-  .catch(e=>{
-    $('btn-exploit').disabled = false;
-    $('btn-exploit').innerHTML = '<i class="fa-solid fa-bolt-lightning"></i> RUN MSF MODULE';
-    log('err', `Connection error: ${e.message}`);
-  });
-});
+  .catch(e=>{ log('err', e.message); resetPortScanUI(); });
+}
 
-// ── Nuclei Scan Button ────────────────────────────────────────────────────────
-const btnNuclei = $('btn-nuclei-scan');
-if (btnNuclei) {
-  btnNuclei.addEventListener('click', ()=>{
-    if (!selectedDevice) {
-      log('warn', 'Select a target host first.');
-      return;
-    }
-    const ip  = selectedDevice.ip;
-    const sev = ($('nuclei-severity-select')||{}).value || 'critical,high,medium';
-    log('info', `Nuclei scan on ${ip} [${sev}] — starting...`);
-    btnNuclei.disabled = true;
-    btnNuclei.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> SCANNING...';
-    setActivity('SCANNING', true);
-
-    fetch(`${API}/api/nuclei/scan`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ip, severities: sev.split(',') })
-    })
+function pollPortScan(ip, animTimer) {
+  fetch(`${API}/api/scan/ports/status?ip=${encodeURIComponent(ip)}`)
     .then(r=>r.json())
-    .then(data=>{
-      btnNuclei.disabled = false;
-      btnNuclei.innerHTML = '<i class="fa-solid fa-atom"></i> RUN NUCLEI SCAN';
-      setActivity('IDLE', false);
+    .then(d=>{
+      if (d.done) {
+        clearInterval(portScanTimer[ip]);
+        clearInterval(animTimer);
+        $('port-progress-fill').style.width = '100%';
 
-      if (data.success) {
-        const count = data.count || 0;
-        log('ok', `Nuclei scan complete: ${count} finding(s) on ${ip}`);
-        (data.findings||[]).forEach(f=>{
-          const sev = (f.severity||'info').toUpperCase();
-          log(sev==='CRITICAL'||sev==='HIGH' ? 'err' : 'warn',
-              `[${sev}] ${f.name} — ${f.matched||ip}`);
-        });
-        // Update device state
-        const idx = currentDevices.findIndex(x=>x.ip===ip);
-        if (idx!==-1) {
-          currentDevices[idx].nuclei_findings = data.findings;
-          if (count > 0) currentDevices[idx].risk = 'Vulnerable';
-          window.showHostDetails(currentDevices[idx]);
+        if (d.device) {
+          const dev = d.device;
+          const idx = devices.findIndex(x=>x.ip===ip);
+          if (idx!==-1) devices[idx]=dev; else devices.push(dev);
+          if (selectedDev?.ip===ip) { selectedDev=dev; showHostDetails(dev); }
+          if (typeof updateNetworkTopology==='function') updateNetworkTopology(devices);
+
+          const op = (dev.open_ports||[]).length;
+          const vn = (dev.vulns||[]).length;
+          log('ok', `Port scan complete for ${ip} — ${op} open port(s), ${vn} vuln(s)`);
+          updateStats();
         }
-      } else {
-        log('err', `Nuclei scan failed: ${data.error||'unknown error'}`);
+        setTimeout(()=>{ $('port-progress-wrap').classList.add('hidden'); }, 1500);
+        resetPortScanUI();
+        setActivity('IDLE','idle');
       }
     })
-    .catch(e=>{
-      btnNuclei.disabled = false;
-      btnNuclei.innerHTML = '<i class="fa-solid fa-atom"></i> RUN NUCLEI SCAN';
-      log('err', `Nuclei error: ${e.message}`);
-    });
-  });
+    .catch(()=>{});
 }
 
-// ── Nuclei Update Templates Button ────────────────────────────────────────────
-const btnNucleiUpdate = $('btn-nuclei-update');
-if (btnNucleiUpdate) {
-  btnNucleiUpdate.addEventListener('click', ()=>{
-    log('info', 'Updating nuclei templates...');
-    btnNucleiUpdate.disabled = true;
-    btnNucleiUpdate.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> UPDATING...';
-    fetch(`${API}/api/nuclei/update`, { method: 'POST' })
-      .then(r=>r.json())
-      .then(data=>{
-        btnNucleiUpdate.disabled = false;
-        btnNucleiUpdate.innerHTML = '<i class="fa-solid fa-arrow-rotate-right"></i> UPDATE TEMPLATES';
-        if (data.success) log('ok', 'Nuclei templates updated successfully.');
-        else log('err', 'Template update failed.');
-      })
-      .catch(()=>{
-        btnNucleiUpdate.disabled = false;
-        btnNucleiUpdate.innerHTML = '<i class="fa-solid fa-arrow-rotate-right"></i> UPDATE TEMPLATES';
-        log('err', 'Could not reach server for template update.');
-      });
-  });
+function resetPortScanUI() {
+  $('btn-scan-ports').disabled = false;
+  $('btn-scan-ports').innerHTML = '<i class="fa-solid fa-circle-nodes"></i> SCAN PORTS';
 }
+
+// ── MSF exploit ───────────────────────────────────────────────────────────────
+$('btn-run-msf').addEventListener('click', runMsf);
+
+function runMsf() {
+  const mod = $('msf-module-sel').value;
+  if (!selectedDev || !mod) { log('warn','Select a target and module first.'); return; }
+  const ip = selectedDev.ip;
+  log('info', `MSF module [${mod}] → ${ip}`);
+  $('btn-run-msf').disabled = true;
+  $('btn-run-msf').innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> RUNNING...';
+  setActivity('EXPLOITING','scan');
+
+  fetch(`${API}/api/msf/exploit`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ip, module:mod})
+  })
+  .then(r=>r.json())
+  .then(d=>{
+    $('btn-run-msf').disabled = false;
+    $('btn-run-msf').innerHTML = '<i class="fa-solid fa-bolt-lightning"></i> RUN ASSESSMENT';
+    setActivity('IDLE','idle');
+    if (d.success) {
+      log('ok', `Module complete: ${mod}`);
+      if (d.output) d.output.split('\n').forEach(l=>l.trim()&&log('dim',l));
+      const idx = devices.findIndex(x=>x.ip===ip);
+      if (idx!==-1) { devices[idx].exploited=true; devices[idx].risk='Exploited'; }
+      if (selectedDev?.ip===ip) showHostDetails(devices[idx]||selectedDev);
+      if (typeof updateNetworkTopology==='function') updateNetworkTopology(devices);
+    } else {
+      log('err', `Module failed: ${d.error||'check MSF status'}`);
+    }
+  })
+  .catch(e=>{ $('btn-run-msf').disabled=false; $('btn-run-msf').innerHTML='<i class="fa-solid fa-bolt-lightning"></i> RUN ASSESSMENT'; log('err',e.message); });
+}
+
+// ── Nuclei scan ───────────────────────────────────────────────────────────────
+$('btn-run-nuclei').addEventListener('click', runNuclei);
+$('btn-nuclei-update').addEventListener('click', ()=>{
+  log('info','Updating Nuclei templates...');
+  fetch(`${API}/api/nuclei/update`, {method:'POST'})
+    .then(r=>r.json())
+    .then(d=>d.success ? log('ok','Templates updated.') : log('err','Update failed.'))
+    .catch(()=>log('err','Update request failed.'));
+});
+
+function runNuclei() {
+  if (!selectedDev) { log('warn','Select a target first.'); return; }
+  const ip   = selectedDev.ip;
+  const sevs = $('nuclei-sev-sel').value;
+  log('nuc', `Nuclei scan starting on ${ip}${sevs ? ` [${sevs}]` : ''}...`);
+  $('btn-run-nuclei').disabled = true;
+  $('btn-run-nuclei').innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> SCANNING...';
+  setActivity('NUCLEI SCAN','nuclei');
+
+  fetch(`${API}/api/nuclei/scan`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ip, severities: sevs ? sevs.split(',') : null})
+  })
+  .then(r=>r.json())
+  .then(d=>{
+    $('btn-run-nuclei').disabled = false;
+    $('btn-run-nuclei').innerHTML = '<i class="fa-solid fa-atom"></i> RUN NUCLEI SCAN';
+    setActivity('IDLE','idle');
+    if (d.success) {
+      log('nuc', `Nuclei found ${d.count} finding(s) on ${ip}`);
+      d.findings.forEach(f=>log('nuc', `  [${f.severity.toUpperCase()}] ${f.name} ${f.cve||''}`));
+      const idx = devices.findIndex(x=>x.ip===ip);
+      if (idx!==-1) {
+        devices[idx].nuclei_findings = d.findings;
+        if (d.count > 0) devices[idx].risk = d.findings.some(f=>f.severity==='critical') ? 'Critical' : 'Vulnerable';
+        if (selectedDev?.ip===ip) showHostDetails(devices[idx]);
+        if (typeof updateNetworkTopology==='function') updateNetworkTopology(devices);
+      }
+      updateStats();
+    } else {
+      log('err', d.error || 'Nuclei scan failed.');
+    }
+  })
+  .catch(e=>{ $('btn-run-nuclei').disabled=false; $('btn-run-nuclei').innerHTML='<i class="fa-solid fa-atom"></i> RUN NUCLEI SCAN'; log('err',e.message); });
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+function updateStats() {
+  $('s-hosts').textContent = devices.length;
+  $('s-vuln').textContent  = devices.filter(d=>d.vulns?.length||d.nuclei_findings?.length).length;
+  $('s-ports').textContent = devices.reduce((s,d)=>s+(d.open_ports||[]).length, 0);
+  $('s-crit').textContent  = devices.reduce((s,d)=>s+(d.nuclei_findings||[]).filter(f=>f.severity==='critical').length, 0);
+}
+
+// ── Graceful shutdown ping when tab closes ────────────────────────────────────
+window.addEventListener('beforeunload', () => {
+  navigator.sendBeacon(`${API}/api/shutdown`, JSON.stringify({}));
+});

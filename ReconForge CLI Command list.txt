@@ -1,95 +1,201 @@
 ================================================================================
-  RECONFORGE — CLI COMMAND SHEET
+  RECONFORGE v4.0.0 — COMPLETE CLI COMMAND REFERENCE
+  Author: Humair Ali  |  For authorised security assessments only
 ================================================================================
 
-────────────────────────────────────────────────────────────────────────────────
-  MODES — pick one
-────────────────────────────────────────────────────────────────────────────────
-
-  reconforge --sweep                          Auto-detect subnet → sweep all hosts
-  reconforge --sweep -t 192.168.1.0/24       Sweep a specific subnet
-  reconforge -t 192.168.1.5 --no-msf         Deep-scan single host (Python only)
-  reconforge --web                            Launch 3D web dashboard (browser)
-  reconforge --interactive                    Interactive TUI menu
 
 ────────────────────────────────────────────────────────────────────────────────
-  SWEEP OPTIONS  (combine with --sweep)
+  INSTALLATION
 ────────────────────────────────────────────────────────────────────────────────
 
-  --sweep --ports                             Sweep + port-scan every host found
-  --sweep -t 10.0.0.0/24 --ports             Sweep subnet + scan all ports
-  --sweep --ports -o report.html             Save HTML report to custom file
-  --sweep --ports --no-msf                   Sweep + scan, no Metasploit needed [recommended]
+  # Recommended (installer script)
+  git clone https://github.com/humairali/ReconForge.git
+  cd ReconForge
+  sudo bash install.sh
+
+  # Or via pip
+  pip install git+https://github.com/humairali/ReconForge.git
+
+  # Or via Make
+  make install
+
+  # Quick launch (auto-installs if needed)
+  bash run.sh -t <target>
+
+
+────────────────────────────────────────────────────────────────────────────────
+  MODES  (pick exactly one)
+────────────────────────────────────────────────────────────────────────────────
+
+  reconforge --sweep                          Auto-detect local subnet → discover all live hosts
+  reconforge --sweep -t 192.168.1.0/24       Sweep a specific CIDR subnet
+  reconforge -t 192.168.1.5                   Deep-scan a single IP (with Metasploit if available)
+  reconforge -t 192.168.1.5 --no-msf         Deep-scan single host, Python probes only (no MSF)
+  reconforge -t example.com --no-msf         Deep-scan a hostname (no Metasploit)
+  reconforge --web                            Launch 3D web dashboard (opens browser automatically)
+  reconforge --interactive                    Launch the interactive TUI guided-assessment menu
+
+
+────────────────────────────────────────────────────────────────────────────────
+  SWEEP OPTIONS  (use with --sweep)
+────────────────────────────────────────────────────────────────────────────────
+
+  reconforge --sweep --ports                                 Sweep + port-scan every discovered host
+  reconforge --sweep -t 10.0.0.0/24 --ports                 Sweep specific subnet + scan all ports
+  reconforge --sweep --ports -o my_report.html              Sweep + scan + save HTML report to file
+  reconforge --sweep --ports --no-msf                       Full sweep/scan — no Metasploit required
+  reconforge --sweep --ports --no-msf -o scan.html          Complete offline recon + HTML report
+  reconforge --sweep -t 172.16.0.0/16 --ports -o audit.html   Large subnet sweep with report
+
 
 ────────────────────────────────────────────────────────────────────────────────
   SINGLE-HOST DEEP SCAN
 ────────────────────────────────────────────────────────────────────────────────
 
-  -t 192.168.1.1 --no-msf                    Deep scan, Python probes only
-  -t 192.168.1.1 --lhost 192.168.1.100       Deep scan with Metasploit + lhost
-  -t 192.168.1.1 -p 8080,9000-9100           Extra ports to scan
-  -t 192.168.1.1 -c "Port Scanning"          Restrict to specific module category
-  -t 192.168.1.1 --threads 200 --timeout 2   Custom thread count + timeout
+  reconforge -t 192.168.1.1 --no-msf                        Deep scan, Python probes only
+  reconforge -t 192.168.1.1 --lhost 192.168.1.100           Full scan with Metasploit + listener IP
+  reconforge -t 192.168.1.1 --lhost 192.168.1.100 --lport 9001   Custom listener port (default: 4444)
+  reconforge -t 192.168.1.1 -p 8080,8443,9000-9100          Scan extra custom ports
+  reconforge -t 192.168.1.1 --no-msf -p 22,80,443,8080-8090 --threads 200   Fast scan + extra ports
+  reconforge -t 192.168.1.1 -c "Port Scanning"              Restrict to specific module category
+  reconforge -t 192.168.1.1 -c "SMB / Windows" "Vulnerability Checks"       Multiple categories
+  reconforge -t 192.168.1.1 --threads 200                   Increase concurrent thread count (default: 100)
+  reconforge -t 192.168.1.1 --timeout 2.0                   Set TCP connect timeout in seconds (default: 1.5)
+  reconforge -t 192.168.1.1 --no-msf -o host_report.json   Save report to named JSON file
+
 
 ────────────────────────────────────────────────────────────────────────────────
   METASPLOIT OPTIONS
 ────────────────────────────────────────────────────────────────────────────────
 
-  --no-msf                                    Skip MSF entirely, use Python scanners
-  --lhost <your-ip> --lport 4444             Local IP + port for reverse payloads
-  --msf-path /opt/msf/bin/msfconsole         Custom path to msfconsole binary
+  --no-msf                                   Skip Metasploit entirely; use Python scanners only
+  --lhost <your-ip>                          Local IP for reverse payloads (e.g. 192.168.1.100)
+  --lport <port>                             Local port for reverse payloads (default: 4444)
+  --msf-path /opt/msf/bin/msfconsole        Custom path to msfconsole binary
+  -c "Port Scanning"                         Restrict MSF to one module category
+  -c "SMB / Windows" "Vulnerability Checks" Restrict MSF to multiple categories
+
 
 ────────────────────────────────────────────────────────────────────────────────
-  WEB DASHBOARD OPTIONS  (combine with --web)
+  NUCLEI OPTIONS  (fast template-based vulnerability scanning)
 ────────────────────────────────────────────────────────────────────────────────
 
-  --web --web-host 0.0.0.0 --web-port 8080   Bind to all interfaces on port 8080
-  --web --no-banner                           Launch web GUI without ASCII banner
+  reconforge --nuclei -t 192.168.1.1                                  Run nuclei against host
+  reconforge --nuclei -t http://192.168.1.1                           Nuclei scan a web target
+  reconforge --nuclei -t 192.168.1.1 --nuclei-severity critical,high  Only critical + high findings
+  reconforge --nuclei -t 192.168.1.1 --nuclei-severity critical,high,medium,low,info   All severities
+  reconforge --nuclei -t 192.168.1.1 --nuclei-tags cve                Only CVE templates
+  reconforge --nuclei -t 192.168.1.1 --nuclei-tags cve,misconfig,exposed-panels         Tag filter
+  reconforge --nuclei -t 192.168.1.1 --nuclei-update                  Update templates before scan
+  reconforge --nuclei -t 192.168.1.1 --nuclei-path /usr/local/bin/nuclei   Custom binary path
+  reconforge --nuclei -t 192.168.1.1 -o findings.json                 Save findings to JSON file
+  reconforge --nuclei-status                                           Check nuclei installation
+
 
 ────────────────────────────────────────────────────────────────────────────────
-  OUTPUT
+  WEB DASHBOARD OPTIONS  (use with --web)
 ────────────────────────────────────────────────────────────────────────────────
 
-  -o my_report.html                           Save report to custom filename
-  --no-banner                                 Suppress the ASCII banner on startup
+  reconforge --web                                   Launch on localhost:5000 (default)
+  reconforge --web --web-host 0.0.0.0               Expose to all network interfaces (LAN access)
+  reconforge --web --web-port 8080                   Use a custom port
+  reconforge --web --web-host 0.0.0.0 --web-port 8080   LAN-accessible on port 8080
+  reconforge --web --no-banner                       Launch without the ASCII art banner
+
 
 ────────────────────────────────────────────────────────────────────────────────
-  UTILITIES
+  OUTPUT OPTIONS
 ────────────────────────────────────────────────────────────────────────────────
 
-  reconforge --check-deps                     Check nmap, msfconsole are on PATH
-  reconforge --list-modules                   Show all 46 MSF modules in catalogue
-  reconforge --list-categories                Show module categories + counts
-  reconforge --version                        Print version and exit
-  reconforge --help                           Full help with all flags
+  -o report.html             Save sweep/scan report to HTML file (auto-named if omitted)
+  -o findings.json           Save nuclei/deep-scan output to JSON file
+  --no-banner                Suppress the ASCII art banner on startup
+
+
+────────────────────────────────────────────────────────────────────────────────
+  UTILITIES & INFORMATION
+────────────────────────────────────────────────────────────────────────────────
+
+  reconforge --version             Print version number and exit
+  reconforge --help                Full help text with all flags and descriptions
+  reconforge --check-deps          Verify nmap, msfconsole, and other dependencies on PATH
+  reconforge --list-modules        List all 46 Metasploit modules in the catalogue
+  reconforge --list-categories     List all module categories with module counts
+  reconforge --nuclei-status       Show nuclei install status, version, and binary path
+  reconforge --no-banner           Suppress ASCII banner (useful in scripts/CI)
+
+
+────────────────────────────────────────────────────────────────────────────────
+  MODULE CATEGORIES  (use with the -c / --categories flag)
+────────────────────────────────────────────────────────────────────────────────
+
+  "Port Scanning"            TCP, SYN, ACK, UDP, XMAS port scanners        (5 modules)
+  "Service Fingerprinting"   SSH, FTP, HTTP, SMB, SNMP, SSL fingerprinting (14 modules)
+  "Host Discovery"           ARP sweep, ICMP, NetBIOS discovery            (3 modules)
+  "SMB / Windows"            SMB enum, shares, users, MS17-010 check       (5 modules)
+  "Vulnerability Checks"     EternalBlue, Shellshock, Heartbleed, etc.     (6 modules)
+  "Web Reconnaissance"       HTTP methods, headers, robots, wmap scanner   (7 modules)
+  "Web App Checks"           SQLi, XSS, directory traversal, file upload   (4 modules)
+  "DNS"                      A, AAAA, MX, NS, TXT, CNAME, zone transfer    (2 modules)
+
+  Total: 46 modules across 8 categories
+
 
 ────────────────────────────────────────────────────────────────────────────────
   COMMON RECIPES
 ────────────────────────────────────────────────────────────────────────────────
 
-  Full sweep + port scan + HTML report, no Metasploit required:
-    reconforge --sweep --ports --no-msf -o scan.html
+  # Full offline recon: sweep + port scan + HTML report (no Metasploit needed)
+  reconforge --sweep --ports --no-msf -o scan.html
 
-  Fast deep-scan of one host with extra ports + high thread count:
-    reconforge -t 192.168.1.5 --no-msf -p 22,80,443,8080-8090 --threads 200
+  # Fast single-host deep scan with extra ports and high thread count
+  reconforge -t 192.168.1.5 --no-msf -p 22,80,443,8080-8090 --threads 200
 
-  MSF vuln-check only on one host:
-    reconforge -t 192.168.1.5 --lhost 192.168.1.100 -c "Vulnerability Checks"
+  # Metasploit vuln check only, specific categories
+  reconforge -t 192.168.1.5 --lhost 192.168.1.100 -c "Vulnerability Checks" "SMB / Windows"
 
-  Web dashboard accessible from other machines on the LAN:
-    reconforge --web --web-host 0.0.0.0
+  # Nuclei critical/high CVE scan on a web target
+  reconforge --nuclei -t http://192.168.1.10 --nuclei-severity critical,high --nuclei-tags cve -o vulns.json
+
+  # Nuclei scan with template update first
+  reconforge --nuclei -t 192.168.1.1 --nuclei-update --nuclei-severity critical,high,medium
+
+  # Web dashboard accessible from other machines on the LAN
+  reconforge --web --web-host 0.0.0.0 --web-port 8080
+
+  # Silent scripted sweep (no banner, custom output path)
+  reconforge --no-banner --sweep -t 10.10.0.0/24 --ports --no-msf -o /tmp/audit_$(date +%F).html
+
+  # Guided TUI session (good for beginners / walkthroughs)
+  reconforge --interactive
+
+  # Quick dependency check before a scan
+  reconforge --check-deps && reconforge --sweep --ports --no-msf -o report.html
+
+  # Large-scale MSF-assisted scan with all SMB + vuln modules
+  reconforge -t 192.168.1.50 --lhost 192.168.1.100 --lport 4444 \
+    -c "SMB / Windows" "Vulnerability Checks" "Port Scanning" \
+    --threads 150 --timeout 2.0 -o full_audit.json
+
 
 ────────────────────────────────────────────────────────────────────────────────
-  MODULE CATEGORIES  (use with -c flag)
+  MAKE TARGETS  (when installed via git clone + make)
 ────────────────────────────────────────────────────────────────────────────────
 
-  "Port Scanning"
-  "Service Fingerprinting"
-  "Host Discovery"
-  "SMB / Windows"
-  "Vulnerability Checks"
-  "Web Reconnaissance"
-  "Web App Checks"
-  "DNS"
+  make install               Install all dependencies and register reconforge command
+  make run                   Auto-install if needed, then launch reconforge
+  make uninstall             Remove reconforge from the system
 
+
+────────────────────────────────────────────────────────────────────────────────
+  NUCLEI INSTALL (if not present)
+────────────────────────────────────────────────────────────────────────────────
+
+  sudo apt install nuclei
+  # or
+  go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
+
+
+================================================================================
+  END OF COMMAND REFERENCE  |  ReconForge v4.0.0  |  Author: Humair Ali
 ================================================================================

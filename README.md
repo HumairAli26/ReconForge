@@ -1,33 +1,261 @@
-# ReconForge
+# ⚔️ ReconForge
 
-**Network Discovery & Security Assessment Platform**
+## Advanced Network Discovery & Security Assessment Platform
 
-ReconForge is a powerful, cross-distribution Linux recon tool that performs host discovery, port scanning, service fingerprinting, DNS enumeration, and optional Metasploit integration — all from a single command.
+ReconForge is a comprehensive Linux-based reconnaissance and security assessment framework designed to automate network discovery, service enumeration, vulnerability identification, and infrastructure analysis from a single command-line interface.
 
-> ⚠️ **For authorised security assessments only.** Only scan systems you own or have explicit written permission to test.
+Built with cybersecurity professionals, students, researchers, and penetration testers in mind, ReconForge combines the power of Python, Nmap, Scapy, DNS intelligence gathering, and optional Metasploit integration into a unified reconnaissance platform capable of performing both rapid assessments and in-depth network analysis.
 
----
-
-## Features
-
-- **Host Discovery** — Triple-method: nmap (primary) + ARP sweep (Scapy) + parallel ICMP/TCP/UDP probe — finds all devices including those that block ping
-- **Port Scanning** — Full 65,535-port scan in two phases; top-1000 ports first for speed, then full sweep; nmap service version detection on found ports
-- **Service Enumeration** — Banner grabbing, HTTP headers, SSL cert inspection
-- **DNS Recon** — A, AAAA, MX, NS, TXT, CNAME lookups
-- **Metasploit Integration** — Fast-boot mode (skips DB init, ~15-45s vs ~2-3min); optional MSF auxiliary module runner (offline-safe)
-- **Interactive TUI** — Menu-driven session for guided assessments
-- **JSON Reports** — Structured output saved automatically after each scan
-- **Offline Mode** — Full functionality without Metasploit installed
+> ⚠️ **Authorized Use Only**
+>
+> ReconForge is intended exclusively for educational purposes, authorized penetration testing, security research, and assessments conducted with explicit permission from the system owner. Unauthorized scanning or testing of systems may violate local laws and regulations.
 
 ---
 
-## Quick Install (One Command)
+# 🎯 Project Goals
+
+ReconForge was developed to simplify and automate the reconnaissance phase of security assessments by providing:
+
+✅ Host Discovery
+
+✅ Port Scanning
+
+✅ Service Fingerprinting
+
+✅ DNS Intelligence Gathering
+
+✅ Vulnerability Enumeration
+
+✅ Automated Reporting
+
+✅ Metasploit Integration
+
+✅ Interactive Assessment Workflows
+
+All within a single platform.
+
+---
+
+# ✨ Key Features
+
+## 🌐 Advanced Host Discovery
+
+ReconForge employs a multi-layered discovery strategy to maximize device detection accuracy.
+
+### Discovery Techniques
+
+🔹 Nmap Host Discovery
+
+🔹 ARP Sweeping (Scapy)
+
+🔹 Parallel ICMP Probing
+
+🔹 TCP Reachability Checks
+
+🔹 UDP Reachability Checks
+
+### Benefits
+
+* Detects devices that block ICMP ping
+* Finds hidden hosts on local networks
+* Improves discovery accuracy
+* Faster than traditional single-method scanning
+
+---
+
+## 🔍 High-Speed Port Scanning
+
+ReconForge performs intelligent two-stage port scanning.
+
+### Phase 1
+
+Scan the most common 1000 ports for rapid results.
+
+### Phase 2
+
+Expand to all 65,535 TCP ports for comprehensive analysis.
+
+### Additional Capabilities
+
+* Service Version Detection
+* Operating System Fingerprinting
+* Protocol Identification
+* Open Port Classification
+
+---
+
+## 🖥 Service Enumeration
+
+After identifying open ports, ReconForge automatically gathers detailed information about exposed services.
+
+### Supported Enumeration
+
+* HTTP Header Analysis
+* Web Server Identification
+* Banner Grabbing
+* SSL Certificate Inspection
+* Service Version Collection
+* Protocol Detection
+
+This enables quick identification of technologies and potentially outdated software.
+
+---
+
+## 🌍 DNS Intelligence Gathering
+
+Perform detailed DNS reconnaissance against target domains.
+
+### Supported Record Types
+
+📌 A Records
+
+📌 AAAA Records
+
+📌 MX Records
+
+📌 NS Records
+
+📌 TXT Records
+
+📌 CNAME Records
+
+### Benefits
+
+* Discover mail infrastructure
+* Identify hosting providers
+* Gather domain intelligence
+* Support attack surface mapping
+
+---
+
+## 🚀 Metasploit Integration
+
+ReconForge includes optional integration with the Metasploit Framework.
+
+### Fast Boot Mode
+
+Traditional Metasploit startup:
+
+⏱ 2–3 Minutes
+
+ReconForge optimized startup:
+
+⚡ 15–45 Seconds
+
+### Capabilities
+
+* Auxiliary Module Execution
+* Vulnerability Verification
+* Service-Specific Enumeration
+* Automated Module Selection
+
+### Offline Safe
+
+ReconForge automatically falls back to pure Python mode if Metasploit is unavailable.
+
+---
+
+## 🖥 Interactive Terminal Interface (TUI)
+
+For users who prefer guided workflows, ReconForge provides an interactive text-based interface.
+
+### Features
+
+* Menu-driven navigation
+* Guided assessments
+* Interactive module selection
+* Report viewing
+* Session management
+
+Ideal for beginners and classroom demonstrations.
+
+---
+
+## 📊 Automated JSON Reporting
+
+Every scan automatically generates structured reports.
+
+### Included Information
+
+* Target Details
+* Host Discovery Results
+* Open Ports
+* Service Information
+* DNS Records
+* Module Results
+* Scan Metadata
+
+Reports can be easily integrated into:
+
+* SIEM Platforms
+* Dashboards
+* Security Pipelines
+* Custom Analysis Tools
+
+---
+
+## 🔌 Fully Functional Offline Mode
+
+ReconForge remains operational even without Metasploit.
+
+### Available Offline Features
+
+✅ Host Discovery
+
+✅ Port Scanning
+
+✅ DNS Enumeration
+
+✅ Service Fingerprinting
+
+✅ Reporting
+
+This makes the tool lightweight and highly portable.
+
+---
+
+# 🏗 Architecture Overview
+
+ReconForge follows a modular architecture that separates scanning, enumeration, reporting, and external integrations.
+
+```text
+ReconForge
+│
+├── CLI Layer
+│   ├── Argument Parsing
+│   └── Interactive TUI
+│
+├── Recon Engine
+│   ├── Host Discovery
+│   ├── Port Scanning
+│   ├── Service Enumeration
+│   ├── DNS Intelligence
+│   └── Reporting
+│
+├── Metasploit Layer
+│   ├── MSF Bridge
+│   ├── Module Runner
+│   └── Auxiliary Modules
+│
+└── Output Layer
+    ├── JSON Reports
+    ├── Console Output
+    └── Future Web Dashboard
+```
+
+---
+
+# ⚡ Installation
+
+## Quick Installation
+
+Install directly from GitHub:
 
 ```bash
 pip install git+https://github.com/humairali/ReconForge.git
 ```
 
-Then run:
+Run:
 
 ```bash
 reconforge -t <target>
@@ -35,203 +263,268 @@ reconforge -t <target>
 
 ---
 
-## Full Install (Recommended — Zero chmod needed)
+## Recommended Installation
+
+Clone the repository:
 
 ```bash
-# 1. Clone
 git clone https://github.com/humairali/ReconForge.git
 cd ReconForge
+```
 
-# 2. Run installer — no chmod needed, just:
+Run the installer:
+
+```bash
 sudo bash install.sh
+```
 
-# 3. Done — run it
+Launch:
+
+```bash
 reconforge --help
 ```
 
-Or even simpler — auto-installs on first run:
+---
+
+## Auto-Install Mode
 
 ```bash
 bash run.sh -t <target>
 ```
 
-Or with make:
+ReconForge automatically installs missing dependencies before execution.
+
+---
+
+## Makefile Installation
 
 ```bash
-make install   # install
-make run       # install if needed + launch
+make install
+```
+
+Run:
+
+```bash
+make run
 ```
 
 ---
 
-## Usage
+# 🚀 Usage Examples
 
-```
-reconforge [OPTIONS]
-```
-
-### Basic Scan
+## Basic Host Scan
 
 ```bash
-# Scan a single host (auto offline/online mode)
 reconforge -t 192.168.1.1
-
-# Scan without Metasploit
-reconforge -t 192.168.1.1 --no-msf
-
-# Scan a hostname
-reconforge -t example.com --no-msf
-
-# Scan with extra ports
-reconforge -t 192.168.1.1 -p 8080,8443,9000-9100 --no-msf
-
-# Save report to custom file
-reconforge -t 192.168.1.1 --no-msf -o my_report.json
 ```
 
-### Metasploit Mode
+---
+
+## Pure Python Mode
 
 ```bash
-# Full scan with Metasploit auxiliary modules
-reconforge -t 192.168.1.1 --lhost 192.168.1.100
-
-# Specific module categories only
-reconforge -t 192.168.1.1 -c "Port Scanning" "Service Fingerprinting"
-
-# Custom msfconsole path
-reconforge -t 192.168.1.1 --msf-path /opt/metasploit-framework/bin/msfconsole
+reconforge -t 192.168.1.1 --no-msf
 ```
 
-### Interactive TUI
+---
+
+## Scan a Domain
+
+```bash
+reconforge -t example.com --no-msf
+```
+
+---
+
+## Additional Ports
+
+```bash
+reconforge -t 192.168.1.1 -p 8080,8443,9000-9100
+```
+
+---
+
+## Save Custom Report
+
+```bash
+reconforge -t 192.168.1.1 -o report.json
+```
+
+---
+
+## Interactive Mode
 
 ```bash
 reconforge --interactive
 ```
 
-### Utility Commands
+---
+
+# 🧰 Utility Commands
+
+## Dependency Verification
 
 ```bash
-reconforge --check-deps          # Verify system dependencies
-reconforge --list-modules        # Show all available MSF modules
-reconforge --list-categories     # Show module categories
-reconforge --version             # Show version
+reconforge --check-deps
 ```
 
 ---
 
-## Options Reference
+## Available Metasploit Modules
 
-| Flag | Description |
-|------|-------------|
-| `-t, --target` | IP, hostname, or CIDR range |
-| `-i, --interactive` | Launch interactive TUI |
-| `--no-msf` | Pure Python mode (no Metasploit) |
-| `--msf-path PATH` | Path to msfconsole binary |
-| `--lhost IP` | Local IP for MSF payloads |
-| `--lport PORT` | Local port (default: 4444) |
-| `-c CATS...` | Filter by module categories |
-| `-p PORTS` | Extra ports (e.g. `22,80,8000-8100`) |
-| `--threads N` | Scan thread count (default: 100) |
-| `--timeout SECS` | TCP timeout (default: 1.5s) |
-| `-o FILE` | Save report to file |
-| `--no-banner` | Suppress ASCII banner |
-| `--check-deps` | Check system dependencies |
-| `--list-modules` | List available MSF modules |
-| `--list-categories` | List module categories |
-
----
-
-## System Requirements
-
-| Requirement | Minimum | Notes |
-|---|---|---|
-| OS | Ubuntu 20.04+ / Kali / Parrot / Debian 11+ | Any modern Linux distro |
-| Python | 3.9+ | `python3 --version` |
-| nmap | Any recent | `sudo apt install nmap` |
-| Metasploit | Optional | Only needed for MSF mode |
-
----
-
-## Project Structure
-
-```
-ReconForge/
-│
-├── reconforge/                   # Main Python package
-│   ├── __init__.py               # Version, metadata
-│   ├── cli.py                    # Entry point (reconforge command)
-│   ├── interactive.py            # Interactive TUI session
-│   │
-│   ├── core/                     # Core engine modules
-│   │   ├── __init__.py
-│   │   ├── recon_engine.py       # Main orchestrator
-│   │   ├── msf_bridge.py         # Metasploit subprocess bridge
-│   │   ├── msf_module_runner.py  # Module execution logic
-│   │   └── report_generator.py  # Report formatting
-│   │
-│   ├── modules/                  # Module definitions
-│   │   ├── __init__.py
-│   │   └── catalog.py            # MSF module catalog
-│   │
-│   ├── utils/                    # Utilities
-│   │   ├── __init__.py
-│   │   └── deps.py               # Dependency checker
-│   │
-│   └── static/                   # Web UI assets (future)
-│       ├── css/style.css
-│       ├── js/app.js
-│       ├── js/network3d.js
-│       └── index.html
-│
-├── tests/                        # Unit tests
-├── docs/                         # Documentation
-│
-├── setup.py                      # Legacy pip install support
-├── pyproject.toml                # Modern packaging (PEP 517/518)
-├── requirements.txt              # Python dependencies
-├── install.sh                    # Linux installer script
-├── uninstall.sh                  # Uninstaller
-├── LICENSE                       # MIT
-└── README.md
+```bash
+reconforge --list-modules
 ```
 
 ---
 
 ## Module Categories
 
-| Category | Description |
-|---|---|
-| Port Scanning | TCP, SYN, ACK, UDP scanners |
-| Host Discovery | ARP, ICMP, NetBIOS discovery |
-| Service Fingerprinting | FTP, SSH, HTTP, SMB, MySQL, RDP banners |
-| Vulnerability Checks | MS17-010, EternalBlue, Heartbleed, etc. |
-| Web Enumeration | HTTP methods, directory brute-force, Nikto |
-| DNS Enumeration | Zone transfers, subdomain brute-force |
-| SNMP Enumeration | Community strings, OID walking |
-| SMB Enumeration | Shares, users, OS detection |
+```bash
+reconforge --list-categories
+```
 
 ---
 
-## Uninstall
+## Version Information
 
 ```bash
-chmod +x uninstall.sh
+reconforge --version
+```
+
+---
+
+# 📂 Project Structure
+
+```text
+ReconForge/
+│
+├── reconforge/
+│   ├── cli.py
+│   ├── interactive.py
+│   │
+│   ├── core/
+│   │   ├── recon_engine.py
+│   │   ├── msf_bridge.py
+│   │   ├── msf_module_runner.py
+│   │   └── report_generator.py
+│   │
+│   ├── modules/
+│   │   └── catalog.py
+│   │
+│   ├── utils/
+│   │   └── deps.py
+│   │
+│   └── static/
+│       ├── css/
+│       ├── js/
+│       └── index.html
+│
+├── docs/
+├── tests/
+├── install.sh
+├── uninstall.sh
+├── requirements.txt
+├── pyproject.toml
+├── setup.py
+└── README.md
+```
+
+---
+
+# 🛡 Supported Security Modules
+
+| Category                  | Capabilities                         |
+| ------------------------- | ------------------------------------ |
+| 🔍 Port Scanning          | TCP, SYN, ACK, UDP scans             |
+| 🌐 Host Discovery         | ARP, ICMP, NetBIOS discovery         |
+| 🖥 Service Fingerprinting | HTTP, FTP, SSH, SMB, RDP, MySQL      |
+| 🚨 Vulnerability Checks   | Heartbleed, MS17-010, EternalBlue    |
+| 🌎 Web Enumeration        | Directories, headers, methods, Nikto |
+| 📡 DNS Enumeration        | Zone transfers, subdomain discovery  |
+| 📶 SNMP Enumeration       | Community strings, OID walking       |
+| 🗂 SMB Enumeration        | Shares, users, OS information        |
+
+---
+
+# 📈 Future Roadmap
+
+ReconForge is actively designed for future expansion.
+
+Planned features include:
+
+### 🌐 Web Dashboard
+
+Interactive browser-based interface.
+
+### 🕸 Network Topology Visualization
+
+Real-time 2D and 3D network mapping.
+
+### 🤖 Automated Risk Scoring
+
+CVSS-based vulnerability ranking.
+
+### 📊 Advanced Reporting
+
+PDF, HTML, and Executive Reports.
+
+### ☁ Cloud Asset Discovery
+
+AWS, Azure, and GCP reconnaissance.
+
+### 🔄 Continuous Monitoring
+
+Scheduled assessments and alerts.
+
+---
+
+# 🎓 Educational Value
+
+ReconForge serves as an excellent learning platform for:
+
+* Network Security
+* Penetration Testing
+* Ethical Hacking
+* Cybersecurity Research
+* Network Enumeration
+* Vulnerability Assessment
+* Python Security Tool Development
+
+---
+
+# 🗑 Uninstallation
+
+```bash
 sudo ./uninstall.sh
 ```
 
 ---
 
-## Legal
+# ⚖ Legal Disclaimer
 
-This tool is intended **only** for:
-- Penetration testing of systems you own
-- Authorised security assessments with written permission
-- Education and research in controlled lab environments
+ReconForge is intended solely for:
 
-Unauthorised scanning is illegal in most jurisdictions. The author takes no responsibility for misuse.
+* Authorized penetration testing
+* Security research
+* Educational environments
+* Laboratory simulations
+* Systems owned by the user
+
+The developer assumes no responsibility for misuse, unauthorized access, or illegal activity conducted using this software.
+
+Always obtain written permission before assessing any system.
 
 ---
 
-## License
+# 📜 License
 
-MIT © Humair Ali
+MIT License
+
+© Humair Ali
+
+---
+
+# 🏆 Conclusion
+
+ReconForge is a modern reconnaissance and security assessment framework that streamlines the information-gathering phase of penetration testing. By integrating host discovery, service enumeration, DNS intelligence, vulnerability verification, reporting, and optional Metasploit support into a single platform, ReconForge provides both beginners and security professionals with a powerful, efficient, and extensible cybersecurity toolkit.

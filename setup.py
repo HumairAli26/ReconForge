@@ -5,7 +5,7 @@ Install from PyPI (future):
     pip install reconforge
 
 Install from GitHub:
-    pip install git+https://github.com/humairali/ReconForge.git
+    pip install git+https://github.com/HumairAli26/ReconForge.git
 
 Install locally (development):
     pip install -e .

@@ -88,31 +88,31 @@ jobs:
         run: reconforge --version && reconforge --list-categories
 
   # ── Install script smoke test ───────────────────────────────────────────────
-install-script:
-  name: install.sh smoke test
-  runs-on: ubuntu-latest
-  needs: test
-
-  steps:
-    - uses: actions/checkout@v4
-
-    - name: Install Nmap
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y nmap
-
-    - name: Run installer (non-root mode)
-      run: |
-        chmod +x install.sh
-        # Run without sudo — will skip apt but test venv + pip install
-        bash install.sh
-
-    - name: Verify reconforge runs after install
-      run: |
-        source ~/.reconforge-venv/bin/activate
-        reconforge --version
-        reconforge --check-deps
-        reconforge --list-modules | head -5
+  install-script:
+    name: install.sh smoke test
+    runs-on: ubuntu-latest
+    needs: test
+  
+    steps:
+      - uses: actions/checkout@v4
+  
+      - name: Install Nmap
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nmap
+  
+      - name: Run installer (non-root mode)
+        run: |
+          chmod +x install.sh
+          # Run without sudo — will skip apt but test venv + pip install
+          bash install.sh
+  
+      - name: Verify reconforge runs after install
+        run: |
+          source ~/.reconforge-venv/bin/activate
+          reconforge --version
+          reconforge --check-deps
+          reconforge --list-modules | head -5
 
   # ── pip install from source ─────────────────────────────────────────────────
   pip-install:

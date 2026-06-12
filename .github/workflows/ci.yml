@@ -100,7 +100,7 @@ jobs:
         run: |
           chmod +x install.sh
           # Run without sudo — will skip apt but test venv + pip install
-          bash install.sh || true
+          bash install.sh
 
       - name: Verify reconforge runs after install
         run: |

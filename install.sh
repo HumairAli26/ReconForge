@@ -40,7 +40,7 @@ else
 fi
 
 # ── System packages ────────────────────────────────────────────────────────
-if [[ -n "$PKG_MGR" ]]; then
+if [[ $EUID -eq 0 && -n "$PKG_MGR" ]]; then
     info "Updating package lists..."
     $PKG_MGR update -qq
 
@@ -49,7 +49,10 @@ if [[ -n "$PKG_MGR" ]]; then
         python3 python3-pip python3-venv python3-dev \
         git nmap net-tools dnsutils curl \
         build-essential libssl-dev libffi-dev libpcap-dev
+
     ok "System packages installed."
+else
+    warn "Not running as root. Skipping system package installation."
 fi
 
 # ── Python version check ────────────────────────────────────────────────────
